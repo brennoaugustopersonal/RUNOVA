@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#070709"/>
+  <defs>
+    <linearGradient id="runovaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6d2e" />
+      <stop offset="100%" stop-color="#ffb800" />
+    </linearGradient>
+  </defs>
+  <path d="M256 96C256 96 160 224 160 320C160 373.019 202.981 416 256 416C309.019 416 352 373.019 352 320C352 224 256 96 256 96ZM256 368C229.49 368 208 346.51 208 320C208 274.67 245.33 208 256 190.67C266.67 208 304 274.67 304 320C304 346.51 282.51 368 256 368Z" fill="url(#runovaGrad)"/>
+</svg>

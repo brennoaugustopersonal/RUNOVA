@@ -1,0 +1,16 @@
+{
+  "short_name": "RUNOVA",
+  "name": "RUNOVA — Personal Running Companion",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#070709",
+  "theme_color": "#070709",
+  "display": "standalone",
+  "orientation": "portrait"
+}

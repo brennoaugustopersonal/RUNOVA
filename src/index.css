@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: #070709;
+    background-image: 
+      radial-gradient(ellipse at 50% -20%, rgba(255, 109, 46, 0.12), transparent 70%),
+      radial-gradient(ellipse at 100% 100%, rgba(255, 184, 0, 0.05), transparent 60%);
+    background-attachment: fixed;
+    color: #f8fafc;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Glassmorphism custom classes */
+.glass-panel {
+  background: rgba(18, 18, 26, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-interactive {
+  background: rgba(20, 20, 30, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel-interactive:active {
+  transform: scale(0.98);
+  background: rgba(28, 28, 42, 0.8);
+  border-color: rgba(255, 109, 46, 0.3);
+}
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, #ff6d2e 0%, #ffb800 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Pulse animation for active simulation ring */
+@keyframes ringGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(255, 109, 46, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 24px rgba(255, 184, 0, 0.7));
+  }
+}
+
+.animate-ring-glow {
+  animation: ringGlow 3s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
