@@ -2,7 +2,8 @@
  * Calcula a distância entre duas coordenadas geográficas em km usando a Fórmula de Haversine.
  */
 export function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
   
   const R = 6371; // Raio da Terra em km
   const dLat = ((lat2 - lat1) * Math.PI) / 180;

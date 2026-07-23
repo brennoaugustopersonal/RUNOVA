@@ -35,7 +35,7 @@ const WMO_CODES = {
  * @returns {Promise<{temperature: number, description: string, emoji: string} | null>}
  */
 export async function fetchCurrentWeather(lat, lon) {
-  if (!lat || !lon) return null;
+  if (lat == null || lon == null || isNaN(lat) || isNaN(lon)) return null;
 
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`;

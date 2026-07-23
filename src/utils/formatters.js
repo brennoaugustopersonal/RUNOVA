@@ -2,7 +2,7 @@
  * Formata um tempo em segundos para mm:ss ou hh:mm:ss
  */
 export function formatTime(totalSeconds) {
-  if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) {
+  if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0 || !isFinite(totalSeconds)) {
     return '00:00';
   }
 
@@ -26,12 +26,9 @@ export function formatPace(paceInMinutes) {
     return "--'--\"";
   }
 
-  const mins = Math.floor(paceInMinutes);
-  const secs = Math.round((paceInMinutes - mins) * 60);
-
-  if (secs === 60) {
-    return `${mins + 1}'00"`;
-  }
+  const totalSecs = Math.round(paceInMinutes * 60);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
 
   return `${mins}'${String(secs).padStart(2, '0')}"`;
 }
@@ -68,6 +65,7 @@ export function formatSpeed(speedKmh) {
 export function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '';
   const now = new Date();
 
   const isToday = date.toDateString() === now.toDateString();
