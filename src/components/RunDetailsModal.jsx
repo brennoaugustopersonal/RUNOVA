@@ -1,14 +1,18 @@
 import React from 'react';
-import { X, Navigation, Clock, Flame, Gauge, Calendar, Trophy } from 'lucide-react';
-import { formatTime, formatPace, formatDistance, formatDate, formatSpeed } from '../utils/formatters';
+import { X, Navigation, Clock, Flame, Gauge, Calendar } from 'lucide-react';
+import { formatTime, formatPace, formatDistance, formatDate } from '../utils/formatters';
 import { PerformanceChart } from './PerformanceChart';
+import { RouteMap } from './RouteMap';
+import { KmSplitsTable } from './KmSplitsTable';
 
 export function RunDetailsModal({ run, allRuns = [], onClose }) {
   if (!run) return null;
 
+  const { routePoints = [], splits = [] } = run;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-md my-auto bg-[#0d0d14] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-5 overflow-hidden">
+      <div className="relative w-full max-w-md my-auto bg-[#0d0d14] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-5 overflow-hidden max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -29,6 +33,11 @@ export function RunDetailsModal({ run, allRuns = [], onClose }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Mapa da Rota */}
+        {routePoints.length > 0 && (
+          <RouteMap routePoints={routePoints} height="180px" />
+        )}
 
         {/* Métricas Principais */}
         <div className="grid grid-cols-2 gap-3">
@@ -73,10 +82,12 @@ export function RunDetailsModal({ run, allRuns = [], onClose }) {
           </div>
         </div>
 
+        {/* Splits por Km */}
+        {splits.length > 0 && <KmSplitsTable splits={splits} />}
+
         {/* Gráfico Comparativo */}
         <PerformanceChart currentRun={run} historyRuns={allRuns.filter((r) => r.id !== run.id)} />
 
-        {/* Botão de Fechar */}
         <button
           onClick={onClose}
           className="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-sm transition-all"

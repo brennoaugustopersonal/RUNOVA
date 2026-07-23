@@ -1,7 +1,9 @@
 import React from 'react';
-import { Trophy, CheckCircle2, Flame, Gauge, Clock, Navigation, ArrowRight } from 'lucide-react';
-import { formatTime, formatPace, formatDistance, formatSpeed } from '../utils/formatters';
+import { Trophy, CheckCircle2, Flame, Navigation, Clock, ArrowRight } from 'lucide-react';
+import { formatTime, formatPace, formatDistance } from '../utils/formatters';
 import { PerformanceChart } from './PerformanceChart';
+import { RouteMap } from './RouteMap';
+import { KmSplitsTable } from './KmSplitsTable';
 
 export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
   if (!runData) return null;
@@ -10,20 +12,19 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
     distanceKm,
     durationSeconds,
     paceMinKm,
-    speedKmh,
     calories,
     completedGoal,
+    routePoints = [],
+    splits = [],
   } = runData;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-fadeIn overflow-y-auto">
-      
-      <div className="relative w-full max-w-md my-auto bg-[#0c0c12] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6 overflow-hidden">
+      <div className="relative w-full max-w-md my-auto bg-[#0c0c12] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6 overflow-hidden max-h-[90vh] overflow-y-auto">
         
-        {/* Glow de fundo */}
         <div className="absolute top-0 right-0 w-60 h-60 bg-gradient-to-br from-[#ff6d2e]/30 via-[#ffb800]/20 to-transparent blur-3xl pointer-events-none" />
 
-        {/* Top Celebration Banner */}
+        {/* Header Celebration */}
         <div className="text-center space-y-2 pt-2">
           <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-[#ff6d2e] to-[#ffb800] p-1 shadow-glow flex items-center justify-center">
             <div className="w-full h-full bg-[#0a0a0f] rounded-[22px] flex items-center justify-center">
@@ -39,11 +40,14 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
           </p>
         </div>
 
-        {/* Métricas Principais da Sessão */}
+        {/* Interactive Route Map */}
+        {routePoints.length > 0 && (
+          <RouteMap routePoints={routePoints} height="180px" />
+        )}
+
+        {/* Métricas Principais */}
         <div className="grid grid-cols-2 gap-3">
-          
-          {/* Distância */}
-          <div className="p-4 rounded-2xl glass-panel border border-white/5 space-y-1">
+          <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
               <Navigation className="w-3.5 h-3.5 text-[#ff6d2e]" />
               <span>Distância</span>
@@ -53,8 +57,7 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
             </div>
           </div>
 
-          {/* Duração */}
-          <div className="p-4 rounded-2xl glass-panel border border-white/5 space-y-1">
+          <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
               <Clock className="w-3.5 h-3.5 text-[#ffb800]" />
               <span>Tempo</span>
@@ -64,8 +67,7 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
             </div>
           </div>
 
-          {/* Ritmo */}
-          <div className="p-4 rounded-2xl glass-panel border border-white/5 space-y-1">
+          <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>Ritmo Médio</span>
@@ -75,8 +77,7 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
             </div>
           </div>
 
-          {/* Calorias */}
-          <div className="p-4 rounded-2xl glass-panel border border-white/5 space-y-1">
+          <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
               <Flame className="w-3.5 h-3.5 text-orange-500" />
               <span>Calorias</span>
@@ -85,8 +86,10 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
               {calories} <span className="text-xs text-slate-400">kcal</span>
             </div>
           </div>
-
         </div>
+
+        {/* Splits por Km */}
+        {splits.length > 0 && <KmSplitsTable splits={splits} />}
 
         {/* Gráfico Comparativo de Desempenho */}
         <PerformanceChart currentRun={runData} historyRuns={historyRuns} />
@@ -101,7 +104,6 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
         </button>
 
       </div>
-
     </div>
   );
 }

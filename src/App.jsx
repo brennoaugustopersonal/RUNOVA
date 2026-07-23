@@ -8,6 +8,8 @@ import { SessionSummaryModal } from './components/SessionSummaryModal';
 import { HistoryView } from './components/HistoryView';
 import { RunDetailsModal } from './components/RunDetailsModal';
 import { PerformanceChart } from './components/PerformanceChart';
+import { BadgesGrid } from './components/BadgesGrid';
+import { CountdownView } from './components/CountdownView';
 import { useRunHistory } from './hooks/useRunHistory';
 import { useActiveRun } from './hooks/useActiveRun';
 
@@ -19,7 +21,6 @@ export function App() {
 
   const { runs, stats, addRun } = useRunHistory();
 
-  // Callback acionado quando a corrida ativa é finalizada ou atinge o objetivo
   const handleRunCompleted = useCallback(
     (finalActiveRunState) => {
       const savedRun = addRun(finalActiveRunState);
@@ -30,7 +31,9 @@ export function App() {
 
   const {
     runState,
-    startRun,
+    showCountdown,
+    requestStartRun,
+    handleCountdownComplete,
     pauseRun,
     resumeRun,
     toggleSpeedMultiplier,
@@ -38,12 +41,10 @@ export function App() {
     resetRun,
   } = useActiveRun(handleRunCompleted);
 
-  // Inicia uma nova corrida a partir do modal de configuração
-  const handleStartRun = (targetDistanceKm, targetDurationMinutes) => {
-    startRun(targetDistanceKm, targetDurationMinutes);
+  const handleStartRun = (targetDistanceKm, targetDurationMinutes, mode) => {
+    requestStartRun(targetDistanceKm, targetDurationMinutes, mode);
   };
 
-  // Fecha a tela de resumo de sessão e volta à página inicial
   const handleCloseSummary = () => {
     setCompletedRunData(null);
     resetRun();
@@ -64,13 +65,16 @@ export function App() {
         {/* TAB 1: Início */}
         {activeTab === 'home' && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Card de Resumo Geral e Ação Rápida */}
+            {/* Card de Resumo Geral */}
             <QuickSummaryCard
               stats={stats}
               onOpenSetup={() => setIsSetupOpen(true)}
             />
 
-            {/* Histórico Recente Rápido */}
+            {/* Badges de Conquistas */}
+            <BadgesGrid runs={runs} />
+
+            {/* Histórico Recente */}
             <HistoryView
               runs={runs.slice(0, 3)}
               onSelectRun={(run) => setSelectedHistoryRun(run)}
@@ -88,11 +92,12 @@ export function App() {
           </div>
         )}
 
-        {/* TAB 3: Resumo & Comparativos de Estatísticas */}
+        {/* TAB 3: Resumo & Estatísticas Pro */}
         {activeTab === 'stats' && (
           <div className="space-y-6 animate-fadeIn">
-            <h2 className="text-lg font-extrabold text-white">Resumo e Análise de Desempenho</h2>
+            <h2 className="text-lg font-extrabold text-white">Resumo e Análise Pro</h2>
             <QuickSummaryCard stats={stats} onOpenSetup={() => setIsSetupOpen(true)} />
+            <BadgesGrid runs={runs} />
             {runs.length > 0 && (
               <PerformanceChart currentRun={runs[0]} historyRuns={runs.slice(1)} />
             )}
@@ -101,15 +106,20 @@ export function App() {
 
       </main>
 
-      {/* Modal de Configuração da Corrida (Distância e Tempo) */}
+      {/* Modal de Configuração de Meta */}
       <SetupRunModal
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}
         onStartRun={handleStartRun}
       />
 
-      {/* Tela Full-Screen da Corrida Ativa com Telemetria em Tempo Real */}
-      {isRunActive && (
+      {/* Tela de Contagem Regressiva 3... 2... 1... GO! */}
+      {showCountdown && (
+        <CountdownView onComplete={handleCountdownComplete} />
+      )}
+
+      {/* Tela Full-Screen da Corrida Ativa */}
+      {isRunActive && !showCountdown && (
         <ActiveRunView
           runState={runState}
           onPause={pauseRun}
@@ -119,7 +129,7 @@ export function App() {
         />
       )}
 
-      {/* Modal de Conclusão de Corrida com Gráfico Comparativo */}
+      {/* Modal de Conclusão da Corrida */}
       {completedRunData && (
         <SessionSummaryModal
           runData={completedRunData}
@@ -128,7 +138,7 @@ export function App() {
         />
       )}
 
-      {/* Modal de Detalhes da Corrida do Histórico */}
+      {/* Modal de Detalhes da Corrida */}
       {selectedHistoryRun && (
         <RunDetailsModal
           run={selectedHistoryRun}
@@ -137,12 +147,12 @@ export function App() {
         />
       )}
 
-      {/* Navegação Inferior Fixa Thumb-Friendly */}
+      {/* Navegação Inferior Fixa */}
       <BottomNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenSetup={() => setIsSetupOpen(true)}
-        isRunActive={isRunActive}
+        isRunActive={isRunActive || showCountdown}
       />
 
     </div>
