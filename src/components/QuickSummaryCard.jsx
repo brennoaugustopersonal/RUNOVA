@@ -2,7 +2,7 @@ import React from 'react';
 import { Activity, Clock, Flame, Navigation, ArrowUpRight } from 'lucide-react';
 import { formatDistance, formatPace, formatTime, formatDate } from '../utils/formatters';
 
-export function QuickSummaryCard({ stats, onOpenSetup }) {
+function QuickSummaryCardFn({ stats, onOpenSetup }) {
   const { totalDistanceKm, avgPaceMinKm, totalRuns, lastRun } = stats;
 
   return (
@@ -88,3 +88,5 @@ export function QuickSummaryCard({ stats, onOpenSetup }) {
     </div>
   );
 }
+
+export const QuickSummaryCard = React.memo(QuickSummaryCardFn);

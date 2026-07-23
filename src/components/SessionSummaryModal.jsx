@@ -2,10 +2,11 @@ import React from 'react';
 import { Trophy, CheckCircle2, Flame, Navigation, Clock, ArrowRight } from 'lucide-react';
 import { formatTime, formatPace, formatDistance } from '../utils/formatters';
 import { PerformanceChart } from './PerformanceChart';
+import { HeartRateChart } from './HeartRateChart';
 import { RouteMap } from './RouteMap';
 import { KmSplitsTable } from './KmSplitsTable';
 
-export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
+function SessionSummaryModalFn({ runData, historyRuns = [], onClose }) {
   if (!runData) return null;
 
   const {
@@ -16,6 +17,7 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
     completedGoal,
     routePoints = [],
     splits = [],
+    heartRateHistory = [],
   } = runData;
 
   return (
@@ -91,6 +93,11 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
         {/* Splits por Km */}
         {splits.length > 0 && <KmSplitsTable splits={splits} />}
 
+        {/* Gráfico de Variação da Frequência Cardíaca */}
+        {heartRateHistory.length > 0 && (
+          <HeartRateChart heartRateHistory={heartRateHistory} durationSeconds={durationSeconds} />
+        )}
+
         {/* Gráfico Comparativo de Desempenho */}
         <PerformanceChart currentRun={runData} historyRuns={historyRuns} />
 
@@ -107,3 +114,5 @@ export function SessionSummaryModal({ runData, historyRuns = [], onClose }) {
     </div>
   );
 }
+
+export const SessionSummaryModal = React.memo(SessionSummaryModalFn);

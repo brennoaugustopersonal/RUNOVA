@@ -2,13 +2,14 @@ import React from 'react';
 import { X, Navigation, Clock, Flame, Gauge, Calendar } from 'lucide-react';
 import { formatTime, formatPace, formatDistance, formatDate } from '../utils/formatters';
 import { PerformanceChart } from './PerformanceChart';
+import { HeartRateChart } from './HeartRateChart';
 import { RouteMap } from './RouteMap';
 import { KmSplitsTable } from './KmSplitsTable';
 
-export function RunDetailsModal({ run, allRuns = [], onClose }) {
+function RunDetailsModalFn({ run, allRuns = [], onClose }) {
   if (!run) return null;
 
-  const { routePoints = [], splits = [] } = run;
+  const { routePoints = [], splits = [], heartRateHistory = [] } = run;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto">
@@ -85,6 +86,11 @@ export function RunDetailsModal({ run, allRuns = [], onClose }) {
         {/* Splits por Km */}
         {splits.length > 0 && <KmSplitsTable splits={splits} />}
 
+        {/* Gráfico de Variação da Frequência Cardíaca */}
+        {heartRateHistory.length > 0 && (
+          <HeartRateChart heartRateHistory={heartRateHistory} durationSeconds={run.durationSeconds} />
+        )}
+
         {/* Gráfico Comparativo */}
         <PerformanceChart currentRun={run} historyRuns={allRuns.filter((r) => r.id !== run.id)} />
 
@@ -99,3 +105,5 @@ export function RunDetailsModal({ run, allRuns = [], onClose }) {
     </div>
   );
 }
+
+export const RunDetailsModal = React.memo(RunDetailsModalFn);

@@ -215,7 +215,7 @@ describe('calculatePerformanceDiff', () => {
     const result = calculatePerformanceDiff(5.0, 5.0);
     expect(result.percent).toBe(0);
     expect(result.isBetter).toBe(true);
-    expect(result.diffFormatted).toBe('+0.0%');
+    expect(result.diffFormatted).toBe('Igual');
   });
 
   it('formata corretamente a diferença percentual', () => {

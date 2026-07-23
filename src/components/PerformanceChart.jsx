@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, Award } from 'lucide-react';
 import { formatPace, formatDate } from '../utils/formatters';
 import { calculatePerformanceDiff } from '../utils/calculations';
 
-export function PerformanceChart({ currentRun, historyRuns = [] }) {
+function PerformanceChartFn({ currentRun, historyRuns = [] }) {
   if (!currentRun) return null;
 
   // Monta lista com as últimas corridas + a corrida atual para o gráfico
@@ -110,3 +110,5 @@ export function PerformanceChart({ currentRun, historyRuns = [] }) {
     </div>
   );
 }
+
+export const PerformanceChart = React.memo(PerformanceChartFn);

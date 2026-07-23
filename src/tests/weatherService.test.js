@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fetchCurrentWeather } from '../services/weatherService';
+import { fetchCurrentWeather, resetWeatherCache } from '../services/weatherService';
 
 describe('fetchCurrentWeather', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn();
+    resetWeatherCache();
   });
 
   it('retorna null para coordenadas invalidas', async () => {

@@ -1,41 +1,9 @@
 import React from 'react';
-import { Trophy, Award, Zap, Flame, Crown, ShieldCheck } from 'lucide-react';
+import { Trophy } from 'lucide-react';
+import { getBadges } from '../services/badgeService';
 
-export function BadgesGrid({ runs = [] }) {
-  const totalRuns = runs.length;
-  const totalKm = runs.reduce((acc, r) => acc + (r.distanceKm || 0), 0);
-  const bestPace = runs.length > 0 ? Math.min(...runs.map((r) => r.paceMinKm || 99)) : 99;
-
-  const badges = [
-    {
-      id: 'first_run',
-      title: 'Primeira Passada',
-      desc: 'Conclua a 1ª corrida',
-      icon: Award,
-      unlocked: totalRuns >= 1,
-    },
-    {
-      id: 'speed_demon',
-      title: 'Velocista',
-      desc: 'Pace abaixo de 5:30/km',
-      icon: Zap,
-      unlocked: bestPace < 5.5,
-    },
-    {
-      id: 'endurance_5k',
-      title: 'Resistência 5K',
-      desc: 'Corra 5 km em 1 sessão',
-      icon: Flame,
-      unlocked: runs.some((r) => r.distanceKm >= 5),
-    },
-    {
-      id: 'runner_pro',
-      title: 'Mestre da Pista',
-      desc: 'Acumule 10 km no total',
-      icon: Crown,
-      unlocked: totalKm >= 10,
-    },
-  ];
+function BadgesGridFn({ runs = [] }) {
+  const badges = getBadges(runs);
 
   return (
     <div className="p-5 rounded-3xl glass-panel border border-white/10 space-y-4 shadow-card">
@@ -71,13 +39,21 @@ export function BadgesGrid({ runs = [] }) {
                 <IconComponent className="w-5 h-5" />
               </div>
 
-              <div className="space-y-0.5">
+              <div className="flex-1 space-y-0.5 min-w-0">
                 <h4 className="text-xs font-extrabold text-white leading-tight">
                   {badge.title}
                 </h4>
                 <p className="text-[10px] text-slate-400 leading-tight">
                   {badge.desc}
                 </p>
+                {!badge.unlocked && badge.progress != null && (
+                  <div className="w-full h-1.5 rounded-full bg-white/10 mt-1.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#ff6d2e] to-[#ffb800] transition-all"
+                      style={{ width: `${Math.min(100, Math.round(badge.progress * 100))}%` }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -86,3 +62,5 @@ export function BadgesGrid({ runs = [] }) {
     </div>
   );
 }
+
+export const BadgesGrid = React.memo(BadgesGridFn);

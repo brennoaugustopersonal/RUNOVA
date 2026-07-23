@@ -15,7 +15,7 @@ const localStorageMock = (() => {
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 
-import { getStoredRuns, saveRun, clearStoredRuns } from '../services/storageService';
+import { getStoredRuns, saveRun, clearStoredRuns, deleteRun } from '../services/storageService';
 
 describe('getStoredRuns', () => {
   beforeEach(() => {
@@ -198,5 +198,52 @@ describe('integração storageService + getStoredRuns', () => {
     clearStoredRuns();
     const runs = getStoredRuns();
     expect(runs.length).toBe(0);
+  });
+});
+
+describe('deleteRun', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('remove corrida específica por ID', () => {
+    const result = saveRun({ distanceKm: 5 });
+    const savedId = result[0].id;
+
+    const updated = deleteRun(savedId);
+    expect(updated.length).toBe(0);
+  });
+
+  it('preserva outras corridas ao deletar uma específica', () => {
+    saveRun({ distanceKm: 1 });
+    saveRun({ distanceKm: 2 });
+    const saved = saveRun({ distanceKm: 3 });
+    const idToDelete = saved[1].id;
+
+    const updated = deleteRun(idToDelete);
+    expect(updated.length).toBe(2);
+    expect(updated[0].distanceKm).toBe(3);
+    expect(updated[1].distanceKm).toBe(1);
+  });
+
+  it('retorna array vazio se não houver corridas', () => {
+    const result = deleteRun('any-id');
+    expect(result).toEqual([]);
+  });
+});
+
+describe('validateRunData (via saveRun)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('preserva campo mode ao salvar', () => {
+    const result = saveRun({ distanceKm: 5, mode: 'gps' });
+    expect(result[0].mode).toBe('gps');
+  });
+
+  it('usa simulation como mode padrão', () => {
+    const result = saveRun({ distanceKm: 5 });
+    expect(result[0].mode).toBe('simulation');
   });
 });

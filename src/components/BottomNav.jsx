@@ -5,7 +5,7 @@ export function BottomNav({ activeTab, setActiveTab, onOpenSetup, isRunActive })
   if (isRunActive) return null; // Esconde barra quando corrida estiver em andamento full-screen
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-6 pt-2 pointer-events-none">
+    <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-2 pointer-events-none">
       <div className="max-w-md mx-auto relative pointer-events-auto flex items-center justify-between px-6 py-3 rounded-3xl glass-panel shadow-2xl border border-white/10 backdrop-blur-2xl bg-[#0e0e14]/90">
         
         {/* Tab 1: Início */}

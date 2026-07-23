@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getStoredRuns, saveRun as saveRunToStorage } from '../services/storageService';
+import { getStoredRuns, saveRun as saveRunToStorage, deleteRun as deleteRunFromStorage } from '../services/storageService';
 import { calculatePace } from '../utils/calculations';
 
 export function useRunHistory() {
@@ -22,11 +22,22 @@ export function useRunHistory() {
       speedKmh: activeRunState.speedKmh,
       calories: activeRunState.calories,
       completedGoal: activeRunState.currentDistanceKm >= activeRunState.targetDistanceKm,
+      routePoints: activeRunState.routePoints || [],
+      splits: activeRunState.splits || [],
+      heartRateHistory: activeRunState.heartRateHistory || [],
+      mode: activeRunState.mode || 'simulation',
+      speedMultiplier: activeRunState.speedMultiplier || 1,
     };
 
     const updatedList = saveRunToStorage(runData);
     setRuns(updatedList);
     return updatedList[0]; // Retorna o item recém criado
+  }, []);
+
+  // Remove uma corrida do histórico
+  const deleteRun = useCallback((runId) => {
+    const updatedList = deleteRunFromStorage(runId);
+    setRuns(updatedList);
   }, []);
 
   // Estatísticas acumuladas
@@ -58,5 +69,6 @@ export function useRunHistory() {
     runs,
     stats,
     addRun,
+    deleteRun,
   };
 }

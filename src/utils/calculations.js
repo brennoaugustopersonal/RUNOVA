@@ -72,9 +72,9 @@ export function calculatePerformanceDiff(currentPace, targetOrAvgPace) {
   const isBetter = diffPercent >= 0;
   const absPercent = Math.abs(diffPercent).toFixed(1);
 
-  return {
-    percent: diffPercent,
-    isBetter,
-    diffFormatted: `${isBetter ? '+' : '-'}${absPercent}%`,
-  };
+  const diffFormatted = Math.abs(diffPercent) < 0.05
+    ? 'Igual'
+    : `${isBetter ? '+' : '-'}${absPercent}%`;
+
+  return { percent: diffPercent, isBetter, diffFormatted };
 }

@@ -1,4 +1,13 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  HashRouter,
+  Routes,
+  Route,
+  useNavigate,
+  useParams,
+  useLocation,
+} from 'react-router-dom';
+import { bluetoothHrService } from './services/bluetoothHrService';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { QuickSummaryCard } from './components/QuickSummaryCard';
@@ -13,13 +22,22 @@ import { CountdownView } from './components/CountdownView';
 import { useRunHistory } from './hooks/useRunHistory';
 import { useActiveRun } from './hooks/useActiveRun';
 
-export function App() {
-  const [activeTab, setActiveTab] = useState('home');
+function RunDetailsModalWrapper({ runs, onClose }) {
+  const { id } = useParams();
+  const run = runs.find((r) => r.id === id);
+  if (!run) return null;
+  return <RunDetailsModal run={run} allRuns={runs} onClose={onClose} />;
+}
+
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [completedRunData, setCompletedRunData] = useState(null);
-  const [selectedHistoryRun, setSelectedHistoryRun] = useState(null);
+  const [bluetoothConnected, setBluetoothConnected] = useState(false);
 
-  const { runs, stats, addRun } = useRunHistory();
+  const { runs, stats, addRun, deleteRun } = useRunHistory();
 
   const handleRunCompleted = useCallback(
     (finalActiveRunState) => {
@@ -39,86 +57,201 @@ export function App() {
     toggleSpeedMultiplier,
     finishRun,
     resetRun,
+    connectBluetoothHr,
+    disconnectBluetoothHr,
   } = useActiveRun(handleRunCompleted);
 
-  const handleStartRun = (targetDistanceKm, targetDurationMinutes, mode) => {
-    requestStartRun(targetDistanceKm, targetDurationMinutes, mode);
-  };
-
-  const handleCloseSummary = () => {
+  const handleOpenSetup = useCallback(() => setIsSetupOpen(true), []);
+  const handleCloseSetup = useCallback(() => setIsSetupOpen(false), []);
+  const handleCloseSummary = useCallback(() => {
     setCompletedRunData(null);
     resetRun();
-    setActiveTab('home');
-  };
+    navigate('/');
+  }, [resetRun, navigate]);
+  const handleStartRun = useCallback(
+    (targetDistanceKm, targetDurationMinutes, mode) => {
+      requestStartRun(targetDistanceKm, targetDurationMinutes, mode);
+    },
+    [requestStartRun]
+  );
+  const handleSelectHistoryRun = useCallback(
+    (run) => navigate(`/run/${run.id}`),
+    [navigate]
+  );
+  const handleDeleteRun = useCallback(
+    (runId) => deleteRun(runId),
+    [deleteRun]
+  );
+  const handleCloseDetails = useCallback(() => navigate(-1), [navigate]);
 
-  const isRunActive = Boolean(runState && runState.status !== 'idle');
+  const handleConnectBluetoothHr = useCallback(async () => {
+    try {
+      await connectBluetoothHr();
+      setBluetoothConnected(true);
+      bluetoothHrService.onDisconnect = () => setBluetoothConnected(false);
+    } catch (e) {
+      if (e.message !== 'User cancelled') {
+        console.warn('Falha ao conectar Bluetooth:', e.message);
+      }
+      setBluetoothConnected(false);
+    }
+  }, [connectBluetoothHr]);
+
+  const handleDisconnectBluetoothHr = useCallback(async () => {
+    await disconnectBluetoothHr();
+    setBluetoothConnected(false);
+  }, [disconnectBluetoothHr]);
+
+  const isRunActive = Boolean(
+    runState &&
+      (runState.status === 'running' || runState.status === 'paused')
+  );
+
+  const activeTab =
+    location.pathname === '/' || location.pathname.startsWith('/run/')
+      ? 'home'
+      : location.pathname === '/history'
+        ? 'history'
+        : location.pathname === '/stats'
+          ? 'stats'
+          : 'home';
+
+  const handleTabChange = useCallback(
+    (tab) => {
+      if (tab === 'home') navigate('/');
+      else navigate(`/${tab}`);
+    },
+    [navigate]
+  );
+
+  const tabOrder = ['home', 'history', 'stats'];
+  const touchStartRef = useRef(null);
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e) => {
+      if (!touchStartRef.current) return;
+      const { x: startX, y: startY } = touchStartRef.current;
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const deltaX = startX - endX;
+      const deltaY = startY - endY;
+      touchStartRef.current = null;
+
+      if (isRunActive || showCountdown) return;
+
+      const currentIdx = tabOrder.indexOf(activeTab);
+      if (currentIdx === -1) return;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5 && Math.abs(deltaX) > 50) {
+        if (deltaX > 0) {
+          const nextIdx = (currentIdx + 1) % tabOrder.length;
+          handleTabChange(tabOrder[nextIdx]);
+        } else {
+          const prevIdx = (currentIdx - 1 + tabOrder.length) % tabOrder.length;
+          handleTabChange(tabOrder[prevIdx]);
+        }
+      }
+    },
+    [activeTab, isRunActive, showCountdown, handleTabChange]
+  );
 
   return (
     <div className="min-h-screen bg-[#070709] text-slate-100 flex flex-col font-sans pb-28 select-none">
-      
-      {/* Header Fixo */}
       <Header />
 
-      {/* Main Content Viewport */}
-      <main className="flex-1 w-full max-w-md mx-auto px-5 pt-5 space-y-6">
-        
-        {/* TAB 1: Início */}
-        {activeTab === 'home' && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* Card de Resumo Geral */}
-            <QuickSummaryCard
-              stats={stats}
-              onOpenSetup={() => setIsSetupOpen(true)}
-            />
-
-            {/* Badges de Conquistas */}
-            <BadgesGrid runs={runs} />
-
-            {/* Histórico Recente */}
-            <HistoryView
-              runs={runs.slice(0, 3)}
-              onSelectRun={(run) => setSelectedHistoryRun(run)}
-            />
-          </div>
-        )}
-
-        {/* TAB 2: Histórico Completo */}
-        {activeTab === 'history' && (
-          <div className="animate-fadeIn">
-            <HistoryView
-              runs={runs}
-              onSelectRun={(run) => setSelectedHistoryRun(run)}
-            />
-          </div>
-        )}
-
-        {/* TAB 3: Resumo & Estatísticas Pro */}
-        {activeTab === 'stats' && (
-          <div className="space-y-6 animate-fadeIn">
-            <h2 className="text-lg font-extrabold text-white">Resumo e Análise Pro</h2>
-            <QuickSummaryCard stats={stats} onOpenSetup={() => setIsSetupOpen(true)} />
-            <BadgesGrid runs={runs} />
-            {runs.length > 0 && (
-              <PerformanceChart currentRun={runs[0]} historyRuns={runs.slice(1)} />
-            )}
-          </div>
-        )}
-
+      <main
+        className="flex-1 w-full max-w-md mx-auto px-5 pt-5 space-y-6"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <div className="space-y-6 animate-fadeIn">
+                <QuickSummaryCard
+                  stats={stats}
+                  onOpenSetup={handleOpenSetup}
+                />
+                <BadgesGrid runs={runs} />
+                <HistoryView
+                  runs={runs.slice(0, 3)}
+                  onSelectRun={handleSelectHistoryRun}
+                  onDeleteRun={handleDeleteRun}
+                />
+              </div>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <div className="animate-fadeIn">
+                <HistoryView
+                  runs={runs}
+                  onSelectRun={handleSelectHistoryRun}
+                  onDeleteRun={handleDeleteRun}
+                />
+              </div>
+            }
+          />
+          <Route
+            path="/stats"
+            element={
+              <div className="space-y-6 animate-fadeIn">
+                <h2 className="text-lg font-extrabold text-white">
+                  Resumo e Análise Pro
+                </h2>
+                <QuickSummaryCard
+                  stats={stats}
+                  onOpenSetup={handleOpenSetup}
+                />
+                <BadgesGrid runs={runs} />
+                {runs.length > 0 && (
+                  <PerformanceChart
+                    currentRun={runs[0]}
+                    historyRuns={runs.slice(1)}
+                  />
+                )}
+              </div>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <div className="space-y-6 animate-fadeIn">
+                <QuickSummaryCard
+                  stats={stats}
+                  onOpenSetup={handleOpenSetup}
+                />
+                <BadgesGrid runs={runs} />
+                <HistoryView
+                  runs={runs.slice(0, 3)}
+                  onSelectRun={handleSelectHistoryRun}
+                  onDeleteRun={handleDeleteRun}
+                />
+              </div>
+            }
+          />
+        </Routes>
       </main>
 
-      {/* Modal de Configuração de Meta */}
       <SetupRunModal
         isOpen={isSetupOpen}
-        onClose={() => setIsSetupOpen(false)}
+        onClose={handleCloseSetup}
         onStartRun={handleStartRun}
       />
 
-      {/* Tela de Contagem Regressiva 3... 2... 1... GO! */}
       {showCountdown && (
         <CountdownView onComplete={handleCountdownComplete} />
       )}
 
-      {/* Tela Full-Screen da Corrida Ativa */}
       {isRunActive && !showCountdown && (
         <ActiveRunView
           runState={runState}
@@ -126,10 +259,12 @@ export function App() {
           onResume={resumeRun}
           onFinish={finishRun}
           onToggleSpeed={toggleSpeedMultiplier}
+          onConnectBluetoothHr={handleConnectBluetoothHr}
+          onDisconnectBluetoothHr={handleDisconnectBluetoothHr}
+          bluetoothConnected={bluetoothConnected}
         />
       )}
 
-      {/* Modal de Conclusão da Corrida */}
       {completedRunData && (
         <SessionSummaryModal
           runData={completedRunData}
@@ -138,24 +273,30 @@ export function App() {
         />
       )}
 
-      {/* Modal de Detalhes da Corrida */}
-      {selectedHistoryRun && (
-        <RunDetailsModal
-          run={selectedHistoryRun}
-          allRuns={runs}
-          onClose={() => setSelectedHistoryRun(null)}
+      <Routes>
+        <Route
+          path="/run/:id"
+          element={
+            <RunDetailsModalWrapper runs={runs} onClose={handleCloseDetails} />
+          }
         />
-      )}
+      </Routes>
 
-      {/* Navegação Inferior Fixa */}
       <BottomNav
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onOpenSetup={() => setIsSetupOpen(true)}
+        setActiveTab={handleTabChange}
+        onOpenSetup={handleOpenSetup}
         isRunActive={isRunActive || showCountdown}
       />
-
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <HashRouter>
+      <AppContent />
+    </HashRouter>
   );
 }
 

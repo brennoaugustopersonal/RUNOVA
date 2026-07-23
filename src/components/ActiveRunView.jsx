@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Pause, Play, Square, Flame, Gauge, Navigation, FastForward, Heart, Volume2, VolumeX, MapPin, Activity } from 'lucide-react';
+import { Pause, Play, Square, Flame, Gauge, Navigation, FastForward, Heart, Volume2, VolumeX, MapPin, Activity, Bluetooth, BluetoothConnected, Radio, Zap, Crosshair } from 'lucide-react';
 import { formatTime, formatPace, formatDistance, formatSpeed } from '../utils/formatters';
 import { voiceService } from '../services/voiceService';
 import { RouteMap } from './RouteMap';
+import { getMetricConfidence } from '../services/physioEstimation';
 
-export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleSpeed }) {
+function ActiveRunViewFn({ runState, onPause, onResume, onFinish, onToggleSpeed, onConnectBluetoothHr, onDisconnectBluetoothHr, bluetoothConnected }) {
   const [isMuted, setIsMuted] = useState(voiceService.muted);
-  const [activeViewMode, setActiveViewMode] = useState('ring'); // 'ring' | 'map'
+  const [activeViewMode, setActiveViewMode] = useState('ring');
+  const [btConnecting, setBtConnecting] = useState(false);
 
   if (!runState) return null;
 
@@ -43,8 +45,10 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
   
   const outerDashoffset = outerCircumference - (progressPercent / 100) * outerCircumference;
   
-  // Pace ring indicator (scaled 3:00 min/km to 8:00 min/km)
-  const pacePercent = Math.min(100, Math.max(0, ((8.0 - currentPaceMinKm) / 5.0) * 100));
+  const MIN_PACE = 2.0;
+  const MAX_PACE = 10.0;
+  const paceRange = MAX_PACE - MIN_PACE;
+  const pacePercent = Math.min(100, Math.max(0, ((MAX_PACE - currentPaceMinKm) / paceRange) * 100));
   const innerDashoffset = innerCircumference - (pacePercent / 100) * innerCircumference;
 
   return (
@@ -71,6 +75,39 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-[#ffb800]" />}
           </button>
+
+          {/* Bluetooth Heart Rate */}
+          {typeof navigator !== 'undefined' && 'bluetooth' in navigator && (
+            <button
+              onClick={async () => {
+                if (bluetoothConnected) {
+                  if (onDisconnectBluetoothHr) onDisconnectBluetoothHr();
+                } else {
+                  setBtConnecting(true);
+                  try {
+                    if (onConnectBluetoothHr) await onConnectBluetoothHr();
+                  } catch (e) {
+                    console.warn('Bluetooth HR:', e.message);
+                  }
+                  setBtConnecting(false);
+                }
+              }}
+              className={`p-2.5 rounded-full border transition-all ${
+                bluetoothConnected
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-glow'
+                  : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+              }`}
+              title={bluetoothConnected ? 'Desconectar Monitor Cardíaco' : 'Conectar Monitor Cardíaco Bluetooth'}
+            >
+              {btConnecting ? (
+                <Activity className="w-4 h-4 animate-pulse" />
+              ) : bluetoothConnected ? (
+                <BluetoothConnected className="w-4 h-4" />
+              ) : (
+                <Bluetooth className="w-4 h-4" />
+              )}
+            </button>
+          )}
 
           {/* Toggle Speed Multiplier */}
           {mode === 'simulation' && (
@@ -187,6 +224,13 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
               <p className="text-lg font-black text-white font-mono">{heartRateBpm} <span className="text-xs text-rose-400 font-normal">BPM</span></p>
             </div>
           </div>
+          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+            bluetoothConnected
+              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+          }`}>
+            {bluetoothConnected ? 'REAL' : 'EST'}
+          </span>
         </div>
 
         {/* Cadence SPM */}
@@ -200,6 +244,9 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
               <p className="text-lg font-black text-white font-mono">{cadenceSpm} <span className="text-xs text-amber-400 font-normal">SPM</span></p>
             </div>
           </div>
+          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            EST
+          </span>
         </div>
       </div>
 
@@ -207,7 +254,12 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
       <div className="relative z-10 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-0.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Ritmo Atual</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                getMetricConfidence('currentPace', mode) === 'measured' ? 'bg-emerald-500' : 'bg-amber-500'
+              }`} />
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Ritmo Atual</span>
+            </div>
             <div className="text-xl font-black text-white font-mono">
               {formatPace(currentPaceMinKm)}
               <span className="text-xs font-normal text-slate-400 ml-1">/km</span>
@@ -215,7 +267,12 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
           </div>
 
           <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-0.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Distância</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                getMetricConfidence('distance', mode) === 'measured' ? 'bg-emerald-500' : 'bg-amber-500'
+              }`} />
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Distância</span>
+            </div>
             <div className="text-xl font-black text-white font-mono">
               {formatDistance(currentDistanceKm, 2)}
               <span className="text-xs font-bold text-[#ff6d2e] ml-1">/ {targetDistanceKm} km</span>
@@ -223,7 +280,12 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
           </div>
 
           <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-0.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Velocidade</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                getMetricConfidence('speed', mode) === 'measured' ? 'bg-emerald-500' : 'bg-amber-500'
+              }`} />
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Velocidade</span>
+            </div>
             <div className="text-xl font-black text-white font-mono">
               {formatSpeed(speedKmh)}
               <span className="text-xs font-normal text-slate-400 ml-1">km/h</span>
@@ -231,7 +293,12 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
           </div>
 
           <div className="p-3.5 rounded-2xl glass-panel border border-white/5 space-y-0.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Calorias</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                getMetricConfidence('calories', mode) === 'calculated' ? 'bg-emerald-500' : 'bg-amber-500'
+              }`} />
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Calorias</span>
+            </div>
             <div className="text-xl font-black text-white font-mono">
               {calories}
               <span className="text-xs font-normal text-slate-400 ml-1">kcal</span>
@@ -263,7 +330,11 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
           </button>
 
           <button
-            onClick={onFinish}
+            onClick={() => {
+              if (window.confirm('Tem certeza que deseja finalizar esta corrida?')) {
+                onFinish();
+              }
+            }}
             className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 text-red-400 flex items-center justify-center active:scale-95 transition-all"
             title="Concluir e Salvar Corrida"
           >
@@ -276,3 +347,5 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
     </div>
   );
 }
+
+export const ActiveRunView = React.memo(ActiveRunViewFn);

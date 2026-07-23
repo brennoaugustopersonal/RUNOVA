@@ -61,6 +61,46 @@
   animation: ringGlow 3s ease-in-out infinite;
 }
 
+/* Fade-in animation for modals and transitions */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Single ping animation for countdown */
+@keyframes pingOnce {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-ping-once {
+  animation: pingOnce 0.5s ease-out;
+}
+
+/* Hide scrollbar for horizontal scroll areas */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Bounce animation for celebration */
+@keyframes bounceSoft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-bounce-soft {
+  animation: bounceSoft 1s ease-in-out infinite;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 4px;

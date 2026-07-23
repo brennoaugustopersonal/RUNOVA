@@ -51,11 +51,15 @@ export function Header() {
         </div>
       </div>
 
-      {/* Right: Weather badge or Ready badge */}
       {weather ? (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel text-xs text-slate-200 font-semibold border border-white/10">
           <span className="text-base">{weather.emoji}</span>
           <span>{weather.temperature}°C</span>
+          {weather.windSpeed > 0 && (
+            <span className="text-slate-400 flex items-center gap-0.5">
+              <Cloud className="w-3 h-3" />{weather.windSpeed}km/h
+            </span>
+          )}
           <span className="hidden sm:inline text-slate-400">• {weather.description}</span>
         </div>
       ) : (

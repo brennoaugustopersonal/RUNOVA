@@ -1,18 +1,117 @@
-import React, { useState } from 'react';
-import { X, Target, Clock, Zap, Play, Sparkles, Navigation, Gamepad2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { X, Target, Clock, Zap, Play, Sparkles, Navigation, Gamepad2, Trash2 } from 'lucide-react';
 import { formatPace } from '../utils/formatters';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-export function SetupRunModal({ isOpen, onClose, onStartRun }) {
+const DEFAULT_POS = [-23.5874, -46.6576];
+
+function GpsWaypointMap({ waypoints, onAddWaypoint, onClearWaypoints }) {
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersLayerRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      center: DEFAULT_POS,
+      zoom: 15,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    }).addTo(map);
+
+    markersLayerRef.current = L.layerGroup().addTo(map);
+
+    map.on('click', (e) => {
+      onAddWaypoint([e.latlng.lat, e.latlng.lng]);
+    });
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        map.setView([position.coords.latitude, position.coords.longitude], 15);
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!markersLayerRef.current) return;
+    markersLayerRef.current.clearLayers();
+    waypoints.forEach(([lat, lng]) => {
+      const icon = L.divIcon({
+        className: '',
+        html: '<div style="width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#ff6d2e,#ffb800);border:2px solid #fff;box-shadow:0 0 8px rgba(255,109,46,0.6);"></div>',
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+      L.marker([lat, lng], { icon }).addTo(markersLayerRef.current);
+    });
+  }, [waypoints]);
+
+  return (
+    <div className="space-y-2">
+      <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 glass-panel">
+        <div ref={mapContainerRef} style={{ height: '160px' }} className="w-full z-0 bg-[#0a0a0f]" />
+        {waypoints.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            <span className="text-[11px] font-semibold text-slate-400 bg-black/60 px-3 py-1.5 rounded-full backdrop-blur-sm">
+              Toque no mapa para adicionar pontos à rota
+            </span>
+          </div>
+        )}
+      </div>
+      {waypoints.length > 0 && (
+        <button
+          onClick={onClearWaypoints}
+          className="text-xs font-bold text-red-400 hover:text-red-300 flex items-center gap-1.5 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Limpar Rota
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SetupRunModalFn({ isOpen, onClose, onStartRun }) {
   const [distanceKm, setDistanceKm] = useState(2.1);
   const [durationMinutes, setDurationMinutes] = useState(12);
-  const [mode, setMode] = useState('simulation'); // 'simulation' | 'gps'
+  const [mode, setMode] = useState('simulation');
+  const [waypoints, setWaypoints] = useState([]);
+
+  const handleAddWaypoint = useCallback((point) => {
+    setWaypoints((prev) => [...prev, point]);
+  }, []);
+
+  const handleClearWaypoints = useCallback(() => {
+    setWaypoints([]);
+  }, []);
 
   if (!isOpen) return null;
 
   const expectedPaceMinKm = durationMinutes > 0 && distanceKm > 0 ? durationMinutes / distanceKm : 0;
 
   const handleStart = () => {
-    onStartRun(distanceKm, durationMinutes, mode);
+    onStartRun(distanceKm, durationMinutes, mode, waypoints);
+    setWaypoints([]);
     onClose();
   };
 
@@ -73,6 +172,15 @@ export function SetupRunModal({ isOpen, onClose, onStartRun }) {
             <span>GPS Real 📡</span>
           </button>
         </div>
+
+        {/* Mapa para seleção de rota (apenas modo GPS) */}
+        {mode === 'gps' && (
+          <GpsWaypointMap
+            waypoints={waypoints}
+            onAddWaypoint={handleAddWaypoint}
+            onClearWaypoints={handleClearWaypoints}
+          />
+        )}
 
         {/* Atalhos Rápidos de Distância */}
         <div className="space-y-2">
@@ -172,3 +280,5 @@ export function SetupRunModal({ isOpen, onClose, onStartRun }) {
     </div>
   );
 }
+
+export const SetupRunModal = React.memo(SetupRunModalFn);

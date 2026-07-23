@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialRunState, tickRunSimulation } from '../services/runSimulator';
+import { createInitialRunState, tickRunSimulation, tickGpsRun, processGpsUpdate } from '../services/runEngine';
+import { estimateHeartRate, estimateCadence, smoothRollingPaces } from '../services/physioEstimation';
 
 describe('createInitialRunState', () => {
   it('cria o estado inicial com valores padrão', () => {
@@ -34,10 +35,12 @@ describe('createInitialRunState', () => {
     expect(state.targetDurationSeconds).toBe(60);
   });
 
-  it('inicializa telemetria pro (BPM e cadência)', () => {
+  it('inicializa telemetria pro com modelo fisiológico (BPM e cadência)', () => {
     const state = createInitialRunState();
-    expect(state.heartRateBpm).toBe(142);
-    expect(state.cadenceSpm).toBe(168);
+    expect(state.heartRateBpm).toBeGreaterThanOrEqual(90);
+    expect(state.heartRateBpm).toBeLessThanOrEqual(120);
+    expect(state.cadenceSpm).toBeGreaterThanOrEqual(155);
+    expect(state.cadenceSpm).toBeLessThanOrEqual(170);
   });
 
   it('inicializa campos de rastreamento', () => {
@@ -210,7 +213,7 @@ describe('tickRunSimulation - routePoints', () => {
     });
   });
 
-  it('não gera routePoints no modo GPS (depende de geolocalização real)', () => {
+  it('não gera routePoints no modo GPS', () => {
     let state = { ...createInitialRunState(5, 30, 'gps'), status: 'running' };
     state = tickRunSimulation(state, 10);
     expect(state.routePoints.length).toBe(0);
@@ -243,13 +246,13 @@ describe('tickRunSimulation - routePoints', () => {
   });
 });
 
-describe('tickRunSimulation - BPM e Cadência', () => {
+describe('tickRunSimulation - BPM e Cadência (modelo fisiológico)', () => {
   it('gera heartRateBpm dentro de faixa realista', () => {
     let state = { ...createInitialRunState(5, 30, 'simulation'), status: 'running' };
     for (let i = 0; i < 60; i++) {
       state = tickRunSimulation(state, 1);
-      expect(state.heartRateBpm).toBeGreaterThanOrEqual(100);
-      expect(state.heartRateBpm).toBeLessThanOrEqual(200);
+      expect(state.heartRateBpm).toBeGreaterThanOrEqual(80);
+      expect(state.heartRateBpm).toBeLessThanOrEqual(195);
     }
   });
 
@@ -257,14 +260,28 @@ describe('tickRunSimulation - BPM e Cadência', () => {
     let state = { ...createInitialRunState(5, 30, 'simulation'), status: 'running' };
     for (let i = 0; i < 60; i++) {
       state = tickRunSimulation(state, 1);
-      expect(state.cadenceSpm).toBeGreaterThanOrEqual(150);
-      expect(state.cadenceSpm).toBeLessThanOrEqual(190);
+      expect(state.cadenceSpm).toBeGreaterThanOrEqual(145);
+      expect(state.cadenceSpm).toBeLessThanOrEqual(195);
     }
+  });
+
+  it('BPM aumenta com maior velocidade', () => {
+    const slowState = { ...createInitialRunState(10, 60, 'simulation'), status: 'running', speedKmh: 6, elapsedSeconds: 60 };
+    const fastState = { ...createInitialRunState(10, 60, 'simulation'), status: 'running', speedKmh: 14, elapsedSeconds: 60 };
+    const slowHR = estimateHeartRate(6, 1);
+    const fastHR = estimateHeartRate(14, 1);
+    expect(fastHR).toBeGreaterThan(slowHR);
+  });
+
+  it('cadência aumenta com maior velocidade', () => {
+    const slowCad = estimateCadence(6);
+    const fastCad = estimateCadence(14);
+    expect(fastCad).toBeGreaterThan(slowCad);
   });
 });
 
-describe('tickRunSimulation - modo GPS', () => {
-  it('não avança distância no modo GPS (sem GPS real no teste)', () => {
+describe('tickRunSimulation - modo GPS (compatibilidade)', () => {
+  it('não avança distância no modo GPS', () => {
     const state = { ...createInitialRunState(2, 12, 'gps'), status: 'running' };
     const next = tickRunSimulation(state, 1);
     expect(next.currentDistanceKm).toBe(0);
@@ -280,11 +297,139 @@ describe('tickRunSimulation - modo GPS', () => {
     expect(state.elapsedSeconds).toBeGreaterThan(0);
   });
 
-  it('modo GPS tem heartRateBpm e cadencia', () => {
+  it('modo GPS tem heartRateBpm e cadencia estimados', () => {
     let state = { ...createInitialRunState(5, 30, 'gps'), status: 'running' };
     state = tickRunSimulation(state, 10);
     expect(state.heartRateBpm).toBeGreaterThan(0);
     expect(state.cadenceSpm).toBeGreaterThan(0);
+  });
+});
+
+describe('tickGpsRun', () => {
+  it('não altera distância (vem do GPS)', () => {
+    const state = { ...createInitialRunState(10, 60, 'gps'), status: 'running', currentDistanceKm: 3.5 };
+    const next = tickGpsRun(state, 1);
+    expect(next.currentDistanceKm).toBe(3.5);
+    expect(next.elapsedSeconds).toBeGreaterThan(0);
+  });
+
+  it('atualiza avgPaceMinKm baseado na distância fornecida pelo GPS', () => {
+    const state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      currentDistanceKm: 3.5,
+      elapsedSeconds: 1200,
+    };
+    const next = tickGpsRun(state, 1);
+    expect(next.avgPaceMinKm).toBeGreaterThan(0);
+  });
+
+  it('estima BPM e cadência pela velocidade real', () => {
+    const state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      currentDistanceKm: 3.5,
+      elapsedSeconds: 900,
+      speedKmh: 10.5,
+    };
+    const next = tickGpsRun(state, 1);
+    expect(next.heartRateBpm).toBeGreaterThan(80);
+    expect(next.cadenceSpm).toBeGreaterThan(145);
+  });
+
+  it('não completa corrida apenas por tempo (depende da distância GPS)', () => {
+    const state = { ...createInitialRunState(5, 30, 'gps'), status: 'running', currentDistanceKm: 2.0 };
+    const next = tickGpsRun(state, 100);
+    expect(next.status).toBe('running');
+  });
+
+  it('preserva currentPaceMinKm (vem do rolling GPS)', () => {
+    const state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      currentPaceMinKm: 5.3,
+    };
+    const next = tickGpsRun(state, 1);
+    expect(next.currentPaceMinKm).toBe(5.3);
+  });
+});
+
+describe('processGpsUpdate', () => {
+  it('retorna null se não estiver running', () => {
+    const state = { ...createInitialRunState(5, 30, 'gps'), status: 'paused' };
+    const result = processGpsUpdate(state, -23.5, -46.6, 10, 50000);
+    expect(result).toBeNull();
+  });
+
+  it('atualiza distância com Haversine a partir de lastPosition', () => {
+    const state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+    };
+    const result = processGpsUpdate(state, -23.586, -46.657, 8, 60000);
+    expect(result.currentDistanceKm).toBeGreaterThan(0);
+    expect(result.routePoints.length).toBe(1);
+  });
+
+  it('atualiza currentPaceMinKm baseado no delta GPS', () => {
+    const state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+      elapsedSeconds: 100,
+      currentPaceMinKm: 6.0,
+    };
+    const result = processGpsUpdate(state, -23.586, -46.657, 8, 60000);
+    expect(result.currentPaceMinKm).toBeGreaterThan(0);
+  });
+
+  it('filtra pulos de distância por velocidade > 45 km/h', () => {
+    const state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+    };
+    const result = processGpsUpdate(state, -22.0, -46.0, 10, 1000);
+    expect(result.currentDistanceKm).toBe(0);
+  });
+
+  it('marca status completed ao atingir targetDistanceKm', () => {
+    const state = {
+      ...createInitialRunState(0.5, 60, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      currentDistanceKm: 0.49,
+      lastGpsTimestamp: 0,
+    };
+    const result = processGpsUpdate(state, -23.58655, -46.657, 8, 60000);
+    expect(result.status).toBe('completed');
+    expect(result.progressPercent).toBe(100);
+  });
+
+  it('atualiza gpsAccuracy', () => {
+    const state = { ...createInitialRunState(5, 30, 'gps'), status: 'running', lastPosition: { lat: -23.587, lon: -46.657 }, lastGpsTimestamp: 10000 };
+    const result = processGpsUpdate(state, -23.586, -46.657, 5, 20000);
+    expect(result.gpsAccuracy).toBe(5);
+  });
+
+  it('cria splits baseados na distância real do GPS', () => {
+    let state = {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      currentDistanceKm: 0.95,
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      elapsedSeconds: 320,
+      lastGpsTimestamp: 0,
+    };
+    const result = processGpsUpdate(state, -23.58655, -46.657, 8, 60000);
+    expect(result.splits.length).toBeGreaterThanOrEqual(1);
+    if (result.splits.length > 0) {
+      expect(result.splits[0].km).toBe(1);
+    }
   });
 });
 
@@ -395,5 +540,49 @@ describe('tickRunSimulation - integridade', () => {
       expect(state.progressPercent).toBeGreaterThanOrEqual(0);
       expect(state.progressPercent).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+describe('physioEstimation', () => {
+  it('estimateHeartRate retorna valores entre restingHr e maxHr', () => {
+    for (let speed = 0; speed <= 20; speed += 1) {
+      const hr = estimateHeartRate(speed, 5);
+      expect(hr).toBeGreaterThanOrEqual(55);
+      expect(hr).toBeLessThanOrEqual(190);
+    }
+  });
+
+  it('estimateHeartRate aumenta com velocidade', () => {
+    const hr1 = estimateHeartRate(5, 1);
+    const hr2 = estimateHeartRate(15, 1);
+    expect(hr2).toBeGreaterThan(hr1);
+  });
+
+  it('estimateHeartRate tem pequeno drift com tempo', () => {
+    const hr1 = estimateHeartRate(10, 1);
+    const hr2 = estimateHeartRate(10, 60);
+    expect(hr2).toBeGreaterThanOrEqual(hr1);
+  });
+
+  it('estimateCadence retorna entre 145 e 195', () => {
+    for (let speed = 0; speed <= 20; speed += 2) {
+      const cad = estimateCadence(speed);
+      expect(cad).toBeGreaterThanOrEqual(145);
+      expect(cad).toBeLessThanOrEqual(195);
+    }
+  });
+
+  it('smoothRollingPaces com array vazio retorna 0', () => {
+    expect(smoothRollingPaces([], 5)).toBe(0);
+  });
+
+  it('smoothRollingPaces retorna média correta', () => {
+    expect(smoothRollingPaces([5.0, 5.2, 5.4], 5)).toBeCloseTo(5.2, 1);
+  });
+
+  it('smoothRollingPaces usa janela correta', () => {
+    const paces = [5.0, 5.2, 5.4, 5.6, 5.8, 6.0, 6.2];
+    const result = smoothRollingPaces(paces, 3);
+    expect(result).toBeCloseTo((5.8 + 6.0 + 6.2) / 3, 1);
   });
 });
