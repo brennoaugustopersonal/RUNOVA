@@ -180,7 +180,7 @@ export function ActiveRunView({ runState, onPause, onResume, onFinish, onToggleS
         <div className="p-3.5 rounded-2xl glass-panel border border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500">
-              <Heart className="w-4 h-4 animate-ping" />
+              <Heart className="w-4 h-4 animate-pulse" />
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Batimentos</p>

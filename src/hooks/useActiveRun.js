@@ -12,6 +12,7 @@ export function useActiveRun(onRunCompleted) {
 
   const timerRef = useRef(null);
   const watchGpsRef = useRef(null);
+  const completedRef = useRef(false);
 
   // Solicita início e exibe contagem regressiva 3... 2... 1...
   const requestStartRun = useCallback((targetDistanceKm, targetDurationMinutes, mode = 'simulation') => {
@@ -25,6 +26,7 @@ export function useActiveRun(onRunCompleted) {
     if (!pendingConfigRef.current) return;
 
     const { targetDistanceKm, targetDurationMinutes, mode } = pendingConfigRef.current;
+    completedRef.current = false;
     soundService.playStartSound();
     voiceService.speakStart();
     triggerHaptic('success');
@@ -62,6 +64,8 @@ export function useActiveRun(onRunCompleted) {
 
   // Finaliza a corrida
   const finishRun = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
     soundService.playCelebrationSound();
     triggerHaptic('heavy');
     setRunState((prev) => {
@@ -77,6 +81,7 @@ export function useActiveRun(onRunCompleted) {
 
   // Cancela a corrida
   const resetRun = useCallback(() => {
+    completedRef.current = false;
     setRunState(null);
     setShowCountdown(false);
   }, []);
@@ -99,14 +104,15 @@ export function useActiveRun(onRunCompleted) {
                 latitude,
                 longitude
               );
-              if (addedKm > 0.05) addedKm = 0;
+              if (addedKm > 1) addedKm = 0;
             }
 
             const newDistanceKm = Math.min(prev.targetDistanceKm, prev.currentDistanceKm + addedKm);
             const isCompleted = newDistanceKm >= prev.targetDistanceKm;
             const newRoutePoints = [...prev.routePoints, [latitude, longitude]];
 
-            if (isCompleted && prev.status !== 'completed') {
+            if (isCompleted && prev.status !== 'completed' && !completedRef.current) {
+              completedRef.current = true;
               soundService.playCelebrationSound();
               voiceService.speakFinish(newDistanceKm);
             }
@@ -155,7 +161,8 @@ export function useActiveRun(onRunCompleted) {
             triggerHaptic('medium');
           }
           
-          if (nextState.status === 'completed' && prev.status !== 'completed') {
+          if (nextState.status === 'completed' && prev.status !== 'completed' && !completedRef.current) {
+            completedRef.current = true;
             soundService.playCelebrationSound();
             voiceService.speakFinish(nextState.currentDistanceKm);
             triggerHaptic('heavy');

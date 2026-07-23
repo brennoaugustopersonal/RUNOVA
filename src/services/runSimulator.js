@@ -78,7 +78,6 @@ export function tickRunSimulation(state, deltaSeconds = 1) {
   const heartRateBpm = Math.round(135 + Math.sin(newElapsed / 10) * 15 + (speed * 2.5));
   const cadenceSpm = Math.round(165 + (speed > 10 ? 10 : 0) + Math.sin(newElapsed / 5) * 4);
 
-  // Geração de pontos simulados de rota em torno do Parque Ibirapuera para visualização bonita no mapa
   let newRoutePoints = [...state.routePoints];
   if (state.mode === 'simulation') {
     const angle = (newElapsed / 180) * Math.PI;
@@ -87,7 +86,12 @@ export function tickRunSimulation(state, deltaSeconds = 1) {
     const radius = 0.003 * (newDistanceKm + 0.1);
     const simLat = centerLat + Math.cos(angle) * radius;
     const simLon = centerLon + Math.sin(angle) * radius;
-    if (newRoutePoints.length === 0 || newElapsed % 2 === 0) {
+    const lastPoint = newRoutePoints[newRoutePoints.length - 1];
+    const shouldAdd = !lastPoint || (
+      Math.abs(simLat - lastPoint[0]) > 0.00005 ||
+      Math.abs(simLon - lastPoint[1]) > 0.00005
+    );
+    if (newRoutePoints.length === 0 || shouldAdd) {
       newRoutePoints.push([simLat, simLon]);
     }
   }

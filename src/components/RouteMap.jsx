@@ -74,8 +74,12 @@ export function RouteMap({ routePoints = [], currentPos = null, height = '200px'
 
     if (routePoints && routePoints.length > 0) {
       polyline.setLatLngs(routePoints);
-      const bounds = L.latLngBounds(routePoints);
-      map.fitBounds(bounds, { padding: [20, 20], maxZoom: 17 });
+      if (routePoints.length >= 2) {
+        const bounds = L.latLngBounds(routePoints);
+        map.fitBounds(bounds, { padding: [20, 20], maxZoom: 17 });
+      } else {
+        map.setView(routePoints[0], 16);
+      }
     }
 
     if (currentPos && currentPos.lat && currentPos.lon) {

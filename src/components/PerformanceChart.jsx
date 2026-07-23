@@ -18,10 +18,9 @@ export function PerformanceChart({ currentRun, historyRuns = [] }) {
   // Comparação da corrida atual vs média
   const perfDiff = calculatePerformanceDiff(currentRun.paceMinKm, avgPastPace);
 
-  // Encontra o ritmo máximo e mínimo para escalar visualmente a altura das barras
-  // Lembrando: Ritmo MENOR = Corrida MAIS RÁPIDA (barra mais alta)
-  const maxPace = Math.max(...allChartRuns.map((r) => r.paceMinKm || 6.0)) + 0.5;
-  const minPace = Math.max(3.0, Math.min(...allChartRuns.map((r) => r.paceMinKm || 5.0)) - 0.5);
+  const allPaces = allChartRuns.map((r) => r.paceMinKm || 6.0);
+  const maxPace = Math.max(...allPaces) + 0.5;
+  const minPace = Math.min(...allPaces) - 0.5;
 
   const getBarHeightPercent = (pace) => {
     if (!pace || pace <= 0) return 30;

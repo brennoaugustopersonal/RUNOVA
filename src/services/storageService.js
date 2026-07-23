@@ -1,59 +1,38 @@
 const STORAGE_KEY = 'runova_runs_history_v1';
 
-// Dados simulados de exemplo para primeira utilização
-const INITIAL_MOCK_RUNS = [
-  {
-    id: 'run-mock-1',
-    date: new Date(Date.now() - 86400000 * 4).toISOString(), // 4 dias atrás
-    distanceKm: 2.1,
-    targetDistanceKm: 2.1,
-    durationSeconds: 780, // 13:00 min
-    targetDurationSeconds: 720, // 12:00 min
-    paceMinKm: 6.19, // ~6'11"
-    speedKmh: 9.69,
-    calories: 145,
-    completedGoal: true,
-  },
-  {
-    id: 'run-mock-2',
-    date: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 dias atrás
-    distanceKm: 3.5,
-    targetDistanceKm: 3.5,
-    durationSeconds: 1215, // 20:15 min
-    targetDurationSeconds: 1200, // 20:00 min
-    paceMinKm: 5.78, // ~5'47"
-    speedKmh: 10.37,
-    calories: 240,
-    completedGoal: true,
-  },
-  {
-    id: 'run-mock-3',
-    date: new Date(Date.now() - 86400000 * 1).toISOString(), // Ontem
-    distanceKm: 2.1,
-    targetDistanceKm: 2.1,
-    durationSeconds: 732, // 12:12 min
-    targetDurationSeconds: 720, // 12:00 min
-    paceMinKm: 5.81, // ~5'48"
-    speedKmh: 10.32,
-    calories: 148,
-    completedGoal: true,
-  },
-];
-
 /**
- * Obtém todas as corridas salvas (ou inicializa com dados simulados)
+ * Obtém todas as corridas salvas do localStorage.
+ * Retorna array vazio se não houver dados.
  */
 export function getStoredRuns() {
   try {
     const rawData = localStorage.getItem(STORAGE_KEY);
     if (!rawData) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_MOCK_RUNS));
-      return INITIAL_MOCK_RUNS;
+      return [];
     }
-    return JSON.parse(rawData);
+    const parsed = JSON.parse(rawData);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    return INITIAL_MOCK_RUNS;
+    return [];
   }
+}
+
+/**
+ * Valida e normaliza dados de uma corrida antes de salvar
+ */
+function validateRunData(data) {
+  return {
+    distanceKm: Math.max(0, Number(data.distanceKm) || 0),
+    targetDistanceKm: Math.max(0, Number(data.targetDistanceKm) || 0),
+    durationSeconds: Math.max(0, Math.floor(Number(data.durationSeconds) || 0)),
+    targetDurationSeconds: Math.max(0, Math.floor(Number(data.targetDurationSeconds) || 0)),
+    paceMinKm: Math.max(0, Number(data.paceMinKm) || 0),
+    speedKmh: Math.max(0, Number(data.speedKmh) || 0),
+    calories: Math.max(0, Math.round(Number(data.calories) || 0)),
+    completedGoal: Boolean(data.completedGoal),
+    routePoints: Array.isArray(data.routePoints) ? data.routePoints : [],
+    splits: Array.isArray(data.splits) ? data.splits : [],
+  };
 }
 
 /**
@@ -63,9 +42,9 @@ export function saveRun(newRunData) {
   try {
     const currentRuns = getStoredRuns();
     const runEntry = {
-      id: `run-${Date.now()}`,
+      id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       date: new Date().toISOString(),
-      ...newRunData,
+      ...validateRunData(newRunData),
     };
     const updatedRuns = [runEntry, ...currentRuns];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedRuns));

@@ -1,36 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Flame } from 'lucide-react';
 import { soundService } from '../services/soundService';
 import { triggerHaptic } from '../services/hapticService';
 
 export function CountdownView({ onComplete }) {
   const [count, setCount] = useState(3);
+  const onCompleteRef = useRef(onComplete);
+  const completedRef = useRef(false);
+
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    soundService.playTone(440 + (4 - count) * 100, 'sine', 0.15, 0.2);
-    triggerHaptic('countdown');
+    if (count > 0) {
+      soundService.playTone(440 + (4 - count) * 100, 'sine', 0.15, 0.2);
+      triggerHaptic('countdown');
 
-    const timer = setInterval(() => {
-      setCount((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          triggerHaptic('success');
-          soundService.playTone(880, 'triangle', 0.3, 0.3);
-          onComplete();
-          return 0;
-        }
-        soundService.playTone(440 + (4 - (prev - 1)) * 100, 'sine', 0.15, 0.2);
-        triggerHaptic('countdown');
-        return prev - 1;
-      });
-    }, 1000);
+      const timer = setTimeout(() => {
+        setCount((prev) => prev - 1);
+      }, 1000);
 
-    return () => clearInterval(timer);
-  }, [onComplete]);
+      return () => clearTimeout(timer);
+    } else {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      triggerHaptic('success');
+      soundService.playTone(880, 'triangle', 0.3, 0.3);
+      onCompleteRef.current();
+    }
+  }, [count]);
 
   return (
     <div className="fixed inset-0 z-50 bg-[#070709] flex flex-col items-center justify-center p-6 text-center select-none animate-fadeIn">
-      {/* Background glow */}
+      {/* Glow de Fundo */}
       <div className="absolute w-96 h-96 bg-gradient-to-tr from-[#ff6d2e]/30 to-[#ffb800]/20 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="relative z-10 space-y-6">
@@ -44,7 +45,7 @@ export function CountdownView({ onComplete }) {
           PREPARE-SE PARA CORRER
         </h2>
 
-        {/* Big Animated Counter */}
+        {/* Animação do Contador */}
         <div key={count} className="text-8xl sm:text-9xl font-black text-gradient font-mono animate-ping-once drop-shadow-glow">
           {count > 0 ? count : 'GO!'}
         </div>
