@@ -2,16 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+// Apenas OpenStreetMap (100% gratuito, sem API key, sem restrições de uso)
+// O tema escuro é obtido via CSS filter: invert(100%) hue-rotate(180deg) brightness(95%)
 const TILE_CONFIGS = [
-  {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    options: {
-      maxZoom: 19,
-      subdomains: 'abcd',
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-    },
-  },
   {
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     options: {
@@ -140,22 +133,25 @@ function RouteMapInner({
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 glass-panel shadow-card">
-      <div
-        ref={mapContainerRef}
-        style={{ height }}
-        className="relative w-full z-0 bg-[#0a0a0f]"
-      >
-        {mapError && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0a0f] z-[1000]">
-            <span className="text-3xl mb-2">⚠️</span>
-            <span className="text-white text-sm font-semibold">
-              Mapa indisponível
-            </span>
-            <span className="text-gray-400 text-xs mt-1">
-              Verifique sua conexão de internet
-            </span>
-          </div>
-        )}
+      {/* CSS filter para tema escuro: inverte cores + ajusta matiz */}
+      <div className="dark-map-container">
+        <div
+          ref={mapContainerRef}
+          style={{ height }}
+          className="relative w-full z-0 bg-[#0a0a0f]"
+        >
+          {mapError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0a0f] z-[1000]">
+              <span className="text-3xl mb-2">⚠️</span>
+              <span className="text-white text-sm font-semibold">
+                Mapa indisponível
+              </span>
+              <span className="text-gray-400 text-xs mt-1">
+                Verifique sua conexão de internet
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="absolute top-2 right-2 z-10 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-bold text-[#ff6d2e] flex items-center gap-1">

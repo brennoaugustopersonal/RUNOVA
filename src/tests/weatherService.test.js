@@ -18,7 +18,7 @@ describe('fetchCurrentWeather', () => {
     globalThis.fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
-        current_weather: { temperature: 22.5, weathercode: 0, windspeed: 10 },
+        current: { temperature_2m: 22.5, weather_code: 0, wind_speed_10m: 10 },
       }),
     });
 
@@ -34,9 +34,9 @@ describe('fetchCurrentWeather', () => {
     expect(await fetchCurrentWeather(-23.55, -46.63)).toBeNull();
   });
 
-  it('retorna null se current_weather nao existir', async () => {
+  it('retorna null se current nao existir', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: null }),
+      ok: true, json: async () => ({ current: null }),
     });
     expect(await fetchCurrentWeather(-23.55, -46.63)).toBeNull();
   });
@@ -58,9 +58,9 @@ describe('fetchCurrentWeather', () => {
     expect(await fetchCurrentWeather(-23.55, -46.63)).toBeNull();
   });
 
-  it('usa a URL correta da API Open-Meteo', async () => {
+  it('usa a URL correta da API Open-Meteo (sintaxe moderna)', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 20, weathercode: 1, windspeed: 5 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 20, weather_code: 1, wind_speed_10m: 5 } }),
     });
 
     await fetchCurrentWeather(-23.55, -46.63);
@@ -70,12 +70,14 @@ describe('fetchCurrentWeather', () => {
     expect(url).toContain('api.open-meteo.com');
     expect(url).toContain('latitude=-23.55');
     expect(url).toContain('longitude=-46.63');
-    expect(url).toContain('current_weather=true');
+    // Nova sintaxe: current= em vez de current_weather=true
+    expect(url).toContain('current=');
+    expect(url).not.toContain('current_weather=true');
   });
 
   it('retorna descricao correta para codigo WMO 0 (Ceu Limpo)', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 30, weathercode: 0, windspeed: 0 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 30, weather_code: 0, wind_speed_10m: 0 } }),
     });
     expect((await fetchCurrentWeather(0, 0)).description).toBe('Céu Limpo');
     expect((await fetchCurrentWeather(0, 0)).emoji).toBe('☀️');
@@ -83,7 +85,7 @@ describe('fetchCurrentWeather', () => {
 
   it('retorna descricao para codigo WMO 95 (Trovoada)', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 20, weathercode: 95, windspeed: 15 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 20, weather_code: 95, wind_speed_10m: 15 } }),
     });
     const result = await fetchCurrentWeather(0, 0);
     expect(result.description).toBe('Trovoada');
@@ -92,16 +94,16 @@ describe('fetchCurrentWeather', () => {
 
   it('retorna fallback para codigo WMO desconhecido', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 25, weathercode: 999, windspeed: 0 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 25, weather_code: 999, wind_speed_10m: 0 } }),
     });
     const result = await fetchCurrentWeather(0, 0);
     expect(result.description).toBe('Indisponível');
     expect(result.emoji).toBe('🌡️');
   });
 
-  it('usa weathercode 0 como fallback se codigo nao existir', async () => {
+  it('usa weather_code 0 como fallback se codigo nao existir', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 28, windspeed: 8 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 28, wind_speed_10m: 8 } }),
     });
     const result = await fetchCurrentWeather(0, 0);
     expect(result.description).toBe('Céu Limpo');
@@ -109,21 +111,21 @@ describe('fetchCurrentWeather', () => {
 
   it('arredonda temperatura para inteiro', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 22.7, weathercode: 0, windspeed: 0 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 22.7, weather_code: 0, wind_speed_10m: 0 } }),
     });
     expect((await fetchCurrentWeather(0, 0)).temperature).toBe(23);
   });
 
   it('arredonda temperatura negativa corretamente', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: -1.3, weathercode: 0, windspeed: 0 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: -1.3, weather_code: 0, wind_speed_10m: 0 } }),
     });
     expect((await fetchCurrentWeather(0, 0)).temperature).toBe(-1);
   });
 
   it('retorna windSpeed corretamente', async () => {
     globalThis.fetch.mockResolvedValue({
-      ok: true, json: async () => ({ current_weather: { temperature: 15, weathercode: 45, windspeed: 25 } }),
+      ok: true, json: async () => ({ current: { temperature_2m: 15, weather_code: 45, wind_speed_10m: 25 } }),
     });
     expect((await fetchCurrentWeather(0, 0)).windSpeed).toBe(25);
   });

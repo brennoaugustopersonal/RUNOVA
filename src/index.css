@@ -112,3 +112,21 @@
   background: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
 }
+
+/* Dark map tiles via CSS filter (100% gratuito, sem API key)
+ * Inverte as cores do OpenStreetMap padrão para criar um tema escuro similar ao CARTO Dark.
+ * O hue-rotate(180deg) restaura os tons de azul/verde para não ficarem artificiais.
+ * A regra .leaflet-control-attribution desinverte o texto de atribuição para ficar legível.
+ */
+.dark-map-container .leaflet-container {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+/* Desinverte a atribuição (texto) para não ficar com cores invertidas */
+.dark-map-container .leaflet-control-attribution {
+  filter: invert(100%) hue-rotate(180deg);
+}
+
+.dark-map-container .leaflet-control-attribution a {
+  color: #94a3b8 !important;
+}

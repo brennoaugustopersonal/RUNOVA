@@ -54,24 +54,25 @@ export async function fetchCurrentWeather(lat, lon) {
   if (cache.data && now - cache.timestamp < CACHE_TTL) return cache.data;
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`;
+    // Usa o parâmetro moderno 'current' em vez do depreciado 'current_weather'
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,weather_code&timezone=auto`;
     const response = await fetch(url);
 
     if (!response.ok) return null;
 
     const data = await response.json();
-    const current = data?.current_weather;
+    const current = data?.current;
 
     if (!current) return null;
 
-    const code = current.weathercode ?? 0;
+    const code = current.weather_code ?? 0;
     const info = WMO_CODES[code] || { desc: 'Indisponível', emoji: '🌡️' };
 
     const result = {
-      temperature: Math.round(current.temperature),
+      temperature: Math.round(current.temperature_2m),
       description: info.desc,
       emoji: info.emoji,
-      windSpeed: Math.round(current.windspeed),
+      windSpeed: Math.round(current.wind_speed_10m),
     };
 
     cache = { data: result, timestamp: now };

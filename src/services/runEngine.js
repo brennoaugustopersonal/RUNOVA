@@ -122,33 +122,14 @@ export function tickRunSimulation(state, deltaSeconds = 1) {
     }
   }
 
-  let newSplits = [...state.splits];
-  let lastKmMarked = state.lastKmMarked;
-  const prevKmCount = Math.floor(state.currentDistanceKm);
-  const currentKmMark = Math.floor(newDistanceKm);
-
-  for (let km = prevKmCount + 1; km <= currentKmMark; km++) {
-    const prevKmTime = newSplits.reduce((acc, s) => acc + s.durationSeconds, 0);
-    const splitDuration = newElapsed - prevKmTime;
-    const splitPace = calculatePace(1, splitDuration);
-
-    newSplits.push({
-      km,
-      durationSeconds: Math.round(splitDuration),
-      paceMinKm: splitPace,
-      isBest: false,
-    });
-
-    lastKmMarked = km;
-  }
-
-  if (newSplits.length > state.splits.length) {
-    const minSplitPace = Math.min(...newSplits.map((s) => s.paceMinKm));
-    newSplits = newSplits.map((s) => ({ ...s, isBest: s.paceMinKm === minSplitPace }));
-  }
-
   // Histórico de FC: amostra a cada 5s para evitar arrays gigantes
   const newHeartRateHistory = [...(state.heartRateHistory || [])];
+
+  const { newSplits, lastKmMarked } = computeSplits(
+    newDistanceKm, state.currentDistanceKm, newElapsed, state.splits, state.lastKmMarked
+  );
+
+  // Histórico de FC: amostra a cada 5s
   if (Math.floor(newElapsed) % 5 === 0 && newElapsed > (state.heartRateHistory?.[state.heartRateHistory.length - 1]?.time ?? -1)) {
     newHeartRateHistory.push({ time: Math.floor(newElapsed), bpm: heartRateBpm });
     if (newHeartRateHistory.length > 600) newHeartRateHistory.shift(); // Máx 600 pontos = 50min
