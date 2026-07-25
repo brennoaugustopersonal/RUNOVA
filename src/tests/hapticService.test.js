@@ -3,6 +3,15 @@ import { triggerHaptic } from '../services/hapticService';
 
 describe('triggerHaptic', () => {
   beforeEach(() => {
+    // `globalThis.navigator` só existe a partir do Node 21; nas versões
+    // anteriores é preciso criá-lo para o teste rodar em qualquer runtime.
+    if (typeof globalThis.navigator === 'undefined') {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: {},
+        configurable: true,
+        writable: true,
+      });
+    }
     globalThis.navigator.vibrate = vi.fn();
   });
 

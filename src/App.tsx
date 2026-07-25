@@ -531,6 +531,8 @@ function AppContent() {
         </Suspense>
       )}
 
+      {/* Overlay de detalhes: vive fora do <main> para cobrir a tela inteira.
+          O catch-all evita o aviso "No routes matched location" nas demais rotas. */}
       <Routes>
         <Route
           path="/run/:id"
@@ -543,6 +545,7 @@ function AppContent() {
             />
           }
         />
+        <Route path="*" element={null} />
       </Routes>
 
       <BottomNav
