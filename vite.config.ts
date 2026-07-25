@@ -133,5 +133,9 @@ export default defineConfig({
   preview: {
     port: Number(process.env.PORT) || 4173,
     host: true,
+    // Necessário quando o serviço roda via `vite preview` atrás de um domínio
+    // gerenciado (Render, Railway, etc.) — sem isso o Vite recusa o Host
+    // header com "Blocked request. This host is not allowed."
+    allowedHosts: true,
   },
 });
