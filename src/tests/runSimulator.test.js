@@ -266,8 +266,6 @@ describe('tickRunSimulation - BPM e Cadência (modelo fisiológico)', () => {
   });
 
   it('BPM aumenta com maior velocidade', () => {
-    const slowState = { ...createInitialRunState(10, 60, 'simulation'), status: 'running', speedKmh: 6, elapsedSeconds: 60 };
-    const fastState = { ...createInitialRunState(10, 60, 'simulation'), status: 'running', speedKmh: 14, elapsedSeconds: 60 };
     const slowHR = estimateHeartRate(6, 1);
     const fastHR = estimateHeartRate(14, 1);
     expect(fastHR).toBeGreaterThan(slowHR);

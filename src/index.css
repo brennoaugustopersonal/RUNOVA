@@ -5,16 +5,38 @@
 @layer base {
   :root {
     color-scheme: dark;
+    /* Altura real do viewport no mobile (barra de endereço some/aparece) */
+    --app-height: 100dvh;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Impede o "pull to refresh" de interromper uma corrida em andamento */
+    overscroll-behavior-y: none;
   }
 
   body {
+    min-height: var(--app-height);
     background-color: #070709;
-    background-image: 
+    background-image:
       radial-gradient(ellipse at 50% -20%, rgba(255, 109, 46, 0.12), transparent 70%),
       radial-gradient(ellipse at 100% 100%, rgba(255, 184, 0, 0.05), transparent 60%);
     background-attachment: fixed;
     color: #f8fafc;
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+}
+
+/* iOS dá zoom automático ao focar inputs com fonte menor que 16px.
+   Precisa vencer as utilities do Tailwind, daí o !important. */
+@media (pointer: coarse) {
+  input:not([type='range']):not([type='checkbox']),
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }
 
@@ -113,16 +135,11 @@
   border-radius: 4px;
 }
 
-/* Dark map tiles via CSS filter (100% gratuito, sem API key)
- * Inverte as cores do OpenStreetMap padrão para criar um tema escuro similar ao CARTO Dark.
- * O hue-rotate(180deg) restaura os tons de azul/verde para não ficarem artificiais.
- * A regra .leaflet-control-attribution desinverte o texto de atribuição para ficar legível.
- */
+/* ─── Dark Map Tiles (OSM + CSS filter, 100% gratuito) ─── */
 .dark-map-container .leaflet-container {
   filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
 }
 
-/* Desinverte a atribuição (texto) para não ficar com cores invertidas */
 .dark-map-container .leaflet-control-attribution {
   filter: invert(100%) hue-rotate(180deg);
 }
@@ -130,3 +147,168 @@
 .dark-map-container .leaflet-control-attribution a {
   color: #94a3b8 !important;
 }
+
+/* ─── Custom Range Sliders (SetupRunModal) ─── */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  background: rgba(30, 30, 45, 0.8);
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6d2e, #ffb800);
+  cursor: pointer;
+  border: 3px solid #0d0d14;
+  box-shadow: 0 0 12px rgba(255, 109, 46, 0.45), 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+  box-shadow: 0 0 20px rgba(255, 109, 46, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6d2e, #ffb800);
+  cursor: pointer;
+  border: 3px solid #0d0d14;
+  box-shadow: 0 0 12px rgba(255, 109, 46, 0.45);
+}
+
+/* ─── Skeleton / Shimmer Loading ─── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 12px;
+}
+
+/* ─── Modal Entrance (scale + fade) ─── */
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-enter {
+  animation: modalEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── Pulse sutil para status ativo ─── */
+@keyframes pulseSoft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-soft {
+  animation: pulseSoft 2s ease-in-out infinite;
+}
+
+/* ─── Page / toast transitions ─── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out;
+}
+
+.page-transition {
+  animation: fadeIn 0.28s ease-out;
+}
+
+/* Safe area helpers */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* GPU-friendly transforms for interactive glass */
+.glass-panel-interactive:hover {
+  border-color: rgba(255, 109, 46, 0.18);
+}
+
+/* Alvos de toque mínimos recomendados (WCAG 2.5.5 / iOS HIG) */
+@media (pointer: coarse) {
+  button,
+  [role='button'],
+  a {
+    min-height: 44px;
+  }
+
+  /* Botões que são só ícone precisam também de largura mínima */
+  button:not(.min-h-0) {
+    min-width: 44px;
+  }
+}
+
+/* Sliders: arrasto horizontal não deve disparar a navegação por gesto */
+input[type='range'] {
+  touch-action: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-ring-glow,
+  .animate-ping,
+  .animate-bounce-soft,
+  .animate-pulse-soft {
+    animation: none !important;
+  }
+}
+
+/* Focus visible for keyboard a11y */
+:focus-visible {
+  outline: 2px solid rgba(255, 109, 46, 0.7);
+  outline-offset: 2px;
+}
+
+/* Bottom nav indicator smooth */
+@supports (backdrop-filter: blur(1px)) {
+  .glass-panel,
+  .glass-panel-interactive {
+    will-change: transform;
+  }
+}
+

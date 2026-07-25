@@ -82,7 +82,7 @@ describe('saveRun', () => {
   });
 
   it('adiciona nova corrida no início da lista', () => {
-    const run1 = saveRun({ distanceKm: 2.0 });
+    saveRun({ distanceKm: 2.0 });
     const run2 = saveRun({ distanceKm: 3.0 });
 
     expect(run2.length).toBe(2);

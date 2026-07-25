@@ -1,24 +1,63 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>RUNOVA — Tracker de corrida com GPS, clima e zonas de FC</title>
+    <meta
+      name="description"
+      content="RUNOVA: tracker de corrida com GPS real, simulador, clima, qualidade do ar, zonas de frequência cardíaca, splits e conquistas. 100% gratuito, offline e sem enviar seus dados a servidores."
+    />
+
     <link rel="icon" type="image/svg+xml" href="/icons/icon-512.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-512.svg" />
     <meta name="theme-color" content="#070709" />
+    <meta name="color-scheme" content="dark" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RUNOVA" />
     <meta name="application-name" content="RUNOVA" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com data: blob:; connect-src 'self' https://api.open-meteo.com; media-src 'self';" />
-    <title>RUNOVA — Personal Running App</title>
-    <!-- Google Fonts: Plus Jakarta Sans -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+    <meta name="format-detection" content="telephone=no" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="RUNOVA — Personal Running Tracker" />
+    <meta
+      property="og:description"
+      content="Corra com GPS real, acompanhe splits, zonas de FC, clima e conquistas. Gratuito e com dados só no seu dispositivo."
+    />
+    <meta property="og:image" content="/icons/icon-512.svg" />
+    <meta name="twitter:card" content="summary" />
+
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'none'; manifest-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' https://*.tile.openstreetmap.org data: blob:; connect-src 'self' https://api.open-meteo.com https://air-quality-api.open-meteo.com https://ipapi.co https://ipwho.is https://nominatim.openstreetmap.org; media-src 'self'; worker-src 'self' blob:;"
+    />
+    <meta
+      name="permissions-policy"
+      content="geolocation=(self), accelerometer=(self), gyroscope=(self), bluetooth=(self), wake-lock=(self), camera=(), microphone=(), payment=()"
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://api.open-meteo.com" />
+    <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300..800&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="bg-[#070709] text-slate-100 font-sans antialiased overflow-x-hidden select-none touch-manipulation">
+  <body
+    class="bg-[#070709] text-slate-100 font-sans antialiased overflow-x-hidden select-none touch-manipulation"
+  >
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <noscript>
+      <div style="padding: 2rem; text-align: center; color: #f8fafc; font-family: sans-serif">
+        <h1>RUNOVA</h1>
+        <p>Este aplicativo precisa de JavaScript habilitado para funcionar.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

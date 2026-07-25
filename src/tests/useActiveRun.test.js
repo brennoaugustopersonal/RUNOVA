@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useActiveRun } from '../hooks/useActiveRun';
 
@@ -40,7 +40,15 @@ vi.mock('../services/bluetoothHrService', () => ({
     connect: vi.fn(),
     disconnect: vi.fn(),
     onHeartRate: null,
+    onDisconnect: null,
   },
+}));
+
+vi.mock('../services/storageService', () => ({
+  saveActiveRunSnapshot: vi.fn(),
+  loadActiveRunSnapshot: vi.fn(() => null),
+  clearActiveRunSnapshot: vi.fn(),
+  getSettings: vi.fn(() => ({ weightKg: 72, voiceMuted: false, units: 'metric' })),
 }));
 
 import { createInitialRunState } from '../services/runEngine';
