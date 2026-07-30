@@ -100,6 +100,13 @@ describe('metForSpeed', () => {
   it('retorna 1 (repouso) para velocidade zero', () => {
     expect(metForSpeed(0)).toBe(1);
   });
+
+  it('trata velocidades de parado/caminhada como tal, não como corrida', () => {
+    expect(metForSpeed(0.9)).toBeLessThan(2); // deslocamento residual de GPS
+    expect(metForSpeed(3)).toBeLessThan(3); // caminhada muito lenta
+    expect(metForSpeed(5)).toBeLessThan(5); // caminhada moderada
+    expect(metForSpeed(7)).toBeGreaterThanOrEqual(6); // corrida leve
+  });
 });
 
 describe('conversões imperiais', () => {

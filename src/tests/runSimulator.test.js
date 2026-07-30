@@ -35,12 +35,16 @@ describe('createInitialRunState', () => {
     expect(state.targetDurationSeconds).toBe(60);
   });
 
-  it('inicializa telemetria pro com modelo fisiológico (BPM e cadência)', () => {
+  it('inicia parado: FC de repouso, cadência e ritmos zerados', () => {
     const state = createInitialRunState();
-    expect(state.heartRateBpm).toBeGreaterThanOrEqual(90);
-    expect(state.heartRateBpm).toBeLessThanOrEqual(120);
-    expect(state.cadenceSpm).toBeGreaterThanOrEqual(155);
-    expect(state.cadenceSpm).toBeLessThanOrEqual(170);
+    expect(state.heartRateBpm).toBeGreaterThanOrEqual(50);
+    expect(state.heartRateBpm).toBeLessThanOrEqual(70);
+    expect(state.cadenceSpm).toBe(0);
+    expect(state.currentPaceMinKm).toBe(0);
+    expect(state.avgPaceMinKm).toBe(0);
+    expect(state.speedKmh).toBe(0);
+    expect(state.movingSeconds).toBe(0);
+    expect(state.isStationary).toBe(true);
   });
 
   it('inicializa campos de rastreamento', () => {
@@ -295,64 +299,118 @@ describe('tickRunSimulation - modo GPS (compatibilidade)', () => {
     expect(state.elapsedSeconds).toBeGreaterThan(0);
   });
 
-  it('modo GPS tem heartRateBpm e cadencia estimados', () => {
+  it('modo GPS sem deslocamento não inventa cadência nem FC de esforço', () => {
     let state = { ...createInitialRunState(5, 30, 'gps'), status: 'running' };
     state = tickRunSimulation(state, 10);
-    expect(state.heartRateBpm).toBeGreaterThan(0);
-    expect(state.cadenceSpm).toBeGreaterThan(0);
+    expect(state.heartRateBpm).toBeLessThanOrEqual(70);
+    expect(state.cadenceSpm).toBe(0);
   });
 });
 
+/** Estado GPS de alguém correndo agora: movimento confirmado neste instante. */
+function movingGpsState(overrides = {}) {
+  const now = Date.now();
+  return {
+    ...createInitialRunState(10, 60, 'gps'),
+    status: 'running',
+    lastMovementTs: now,
+    lastGpsTimestamp: now,
+    gpsFixCount: 5,
+    ...overrides,
+  };
+}
+
 describe('tickGpsRun', () => {
   it('não altera distância (vem do GPS)', () => {
-    const state = { ...createInitialRunState(10, 60, 'gps'), status: 'running', currentDistanceKm: 3.5 };
+    const state = movingGpsState({ currentDistanceKm: 3.5 });
     const next = tickGpsRun(state, 1);
     expect(next.currentDistanceKm).toBe(3.5);
     expect(next.elapsedSeconds).toBeGreaterThan(0);
   });
 
   it('atualiza avgPaceMinKm baseado na distância fornecida pelo GPS', () => {
-    const state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
+    const state = movingGpsState({
       currentDistanceKm: 3.5,
       elapsedSeconds: 1200,
-    };
+      movingSeconds: 1200,
+    });
     const next = tickGpsRun(state, 1);
     expect(next.avgPaceMinKm).toBeGreaterThan(0);
   });
 
   it('estima BPM e cadência pela velocidade real', () => {
-    const state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
+    const state = movingGpsState({
       currentDistanceKm: 3.5,
       elapsedSeconds: 900,
+      movingSeconds: 900,
       speedKmh: 10.5,
-    };
+    });
     const next = tickGpsRun(state, 1);
     expect(next.heartRateBpm).toBeGreaterThan(80);
     expect(next.cadenceSpm).toBeGreaterThan(145);
   });
 
   it('não completa corrida apenas por tempo (depende da distância GPS)', () => {
-    const state = { ...createInitialRunState(5, 30, 'gps'), status: 'running', currentDistanceKm: 2.0 };
+    const state = movingGpsState({ targetDistanceKm: 5, currentDistanceKm: 2.0 });
     const next = tickGpsRun(state, 100);
     expect(next.status).toBe('running');
   });
 
-  it('preserva currentPaceMinKm (vem do rolling GPS)', () => {
-    const state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
-      currentPaceMinKm: 5.3,
-    };
+  it('preserva currentPaceMinKm enquanto há movimento', () => {
+    const state = movingGpsState({ currentPaceMinKm: 5.3 });
     const next = tickGpsRun(state, 1);
     expect(next.currentPaceMinKm).toBe(5.3);
+  });
+
+  it('parado: tempo corre, mas movimento, ritmo, velocidade e calorias não', () => {
+    // Cenário do bug: app aberto por 15 min sem sair do lugar.
+    let state = { ...createInitialRunState(5, 30, 'gps'), status: 'running' };
+    for (let i = 0; i < 900; i++) {
+      state = tickGpsRun(state, 1);
+    }
+    expect(state.elapsedSeconds).toBe(900);
+    expect(state.movingSeconds).toBe(0);
+    expect(state.currentDistanceKm).toBe(0);
+    expect(state.avgPaceMinKm).toBe(0);
+    expect(state.speedKmh).toBe(0);
+    expect(state.calories).toBe(0);
+    expect(state.cadenceSpm).toBe(0);
+    expect(state.isStationary).toBe(true);
+    expect(state.heartRateBpm).toBeLessThanOrEqual(70);
+  });
+
+  it('volta a marcar parado quando o movimento cessa por mais de 15 s', () => {
+    const start = Date.now();
+    const state = movingGpsState({
+      currentDistanceKm: 1,
+      movingSeconds: 300,
+      speedKmh: 12,
+      lastMovementTs: start,
+    });
+    const stillMoving = tickGpsRun(state, 1, start + 5000);
+    expect(stillMoving.isStationary).toBe(false);
+    expect(stillMoving.movingSeconds).toBe(301);
+
+    const stopped = tickGpsRun(state, 1, start + 20000);
+    expect(stopped.isStationary).toBe(true);
+    expect(stopped.movingSeconds).toBe(300);
+    expect(stopped.speedKmh).toBe(0);
   });
 });
 
 describe('processGpsUpdate', () => {
+  /** Corrida por GPS já aquecida, ancorada e com um fix anterior. */
+  function anchoredGpsState(overrides = {}) {
+    return {
+      ...createInitialRunState(10, 60, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+      gpsFixCount: 3,
+      ...overrides,
+    };
+  }
+
   it('retorna null se não estiver running', () => {
     const state = { ...createInitialRunState(5, 30, 'gps'), status: 'paused' };
     const result = processGpsUpdate(state, -23.5, -46.6, 10, 50000);
@@ -360,74 +418,184 @@ describe('processGpsUpdate', () => {
   });
 
   it('atualiza distância com Haversine a partir de lastPosition', () => {
-    const state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
-      lastPosition: { lat: -23.587, lon: -46.657 },
-      lastGpsTimestamp: 0,
-    };
-    const result = processGpsUpdate(state, -23.586, -46.657, 8, 60000);
+    const result = processGpsUpdate(anchoredGpsState(), -23.586, -46.657, 8, 60000);
     expect(result.currentDistanceKm).toBeGreaterThan(0);
     expect(result.routePoints.length).toBe(1);
   });
 
   it('atualiza currentPaceMinKm baseado no delta GPS', () => {
-    const state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
-      lastPosition: { lat: -23.587, lon: -46.657 },
-      lastGpsTimestamp: 0,
-      elapsedSeconds: 100,
-      currentPaceMinKm: 6.0,
-    };
+    const state = anchoredGpsState({ elapsedSeconds: 100, currentPaceMinKm: 6.0 });
     const result = processGpsUpdate(state, -23.586, -46.657, 8, 60000);
     expect(result.currentPaceMinKm).toBeGreaterThan(0);
   });
 
   it('filtra pulos de distância por velocidade > 45 km/h', () => {
-    const state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
-      lastPosition: { lat: -23.587, lon: -46.657 },
-      lastGpsTimestamp: 0,
-    };
-    const result = processGpsUpdate(state, -22.0, -46.0, 10, 1000);
+    const result = processGpsUpdate(anchoredGpsState(), -22.0, -46.0, 10, 1000);
     expect(result.currentDistanceKm).toBe(0);
   });
 
   it('marca status completed ao atingir targetDistanceKm', () => {
-    const state = {
-      ...createInitialRunState(0.5, 60, 'gps'),
-      status: 'running',
-      lastPosition: { lat: -23.587, lon: -46.657 },
-      currentDistanceKm: 0.49,
-      lastGpsTimestamp: 0,
-    };
+    const state = anchoredGpsState({ targetDistanceKm: 0.5, currentDistanceKm: 0.49 });
     const result = processGpsUpdate(state, -23.58655, -46.657, 8, 60000);
     expect(result.status).toBe('completed');
     expect(result.progressPercent).toBe(100);
   });
 
   it('atualiza gpsAccuracy', () => {
-    const state = { ...createInitialRunState(5, 30, 'gps'), status: 'running', lastPosition: { lat: -23.587, lon: -46.657 }, lastGpsTimestamp: 10000 };
+    const state = anchoredGpsState({ lastGpsTimestamp: 10000 });
     const result = processGpsUpdate(state, -23.586, -46.657, 5, 20000);
     expect(result.gpsAccuracy).toBe(5);
   });
 
   it('cria splits baseados na distância real do GPS', () => {
-    let state = {
-      ...createInitialRunState(10, 60, 'gps'),
-      status: 'running',
+    const state = anchoredGpsState({
       currentDistanceKm: 0.95,
-      lastPosition: { lat: -23.587, lon: -46.657 },
       elapsedSeconds: 320,
-      lastGpsTimestamp: 0,
-    };
+      movingSeconds: 320,
+    });
     const result = processGpsUpdate(state, -23.58655, -46.657, 8, 60000);
     expect(result.splits.length).toBeGreaterThanOrEqual(1);
-    if (result.splits.length > 0) {
-      expect(result.splits[0].km).toBe(1);
+    expect(result.splits[0].km).toBe(1);
+  });
+});
+
+describe('processGpsUpdate - filtros de GPS parado (regressão do bug real)', () => {
+  /**
+   * Reproduz o relato: celular parado por 15 min gerando 0,23 km fantasma.
+   * O jitter usa uma sequência determinística de deslocamentos de até ~12 m.
+   */
+  it('não acumula distância com jitter de GPS estando parado', () => {
+    const baseLat = -5.5264;
+    const baseLon = -47.4917;
+    let state = {
+      ...createInitialRunState(5, 30, 'gps'),
+      status: 'running',
+      startedAt: 0,
+    };
+
+    for (let i = 0; i < 900; i++) {
+      // Ruído pseudoaleatório determinístico de ±0,0001° (~±11 m).
+      const jitterLat = Math.sin(i * 1.7) * 0.0001;
+      const jitterLon = Math.cos(i * 2.3) * 0.0001;
+      const updated = processGpsUpdate(
+        state,
+        baseLat + jitterLat,
+        baseLon + jitterLon,
+        12, // precisão típica de celular em ambiente urbano
+        i * 1000,
+        0.2 // Doppler: 0,72 km/h — parado
+      );
+      state = updated ?? state;
+      state = tickGpsRun(state, 1, i * 1000);
     }
+
+    expect(state.currentDistanceKm).toBe(0);
+    expect(state.movingSeconds).toBe(0);
+    expect(state.calories).toBe(0);
+    expect(state.avgPaceMinKm).toBe(0);
+    expect(state.cadenceSpm).toBe(0);
+    expect(state.isStationary).toBe(true);
+    expect(state.routePoints.length).toBeLessThanOrEqual(1);
+  });
+
+  it('acumula distância normalmente quando há corrida de verdade', () => {
+    let state = {
+      ...createInitialRunState(5, 30, 'gps'),
+      status: 'running',
+      startedAt: 0,
+    };
+
+    // ~3 m/s (10,8 km/h) rumo ao norte, um fix por segundo.
+    for (let i = 0; i < 120; i++) {
+      const updated = processGpsUpdate(
+        state,
+        -5.5264 + i * 0.000027,
+        -47.4917,
+        8,
+        i * 1000,
+        3
+      );
+      state = updated ?? state;
+      state = tickGpsRun(state, 1, i * 1000);
+    }
+
+    expect(state.currentDistanceKm).toBeGreaterThan(0.3);
+    expect(state.currentDistanceKm).toBeLessThan(0.45);
+    expect(state.isStationary).toBe(false);
+    expect(state.movingSeconds).toBeGreaterThan(100);
+    expect(state.avgPaceMinKm).toBeGreaterThan(4);
+    expect(state.avgPaceMinKm).toBeLessThan(8);
+    expect(state.cadenceSpm).toBeGreaterThan(150);
+    expect(state.calories).toBeGreaterThan(0);
+  });
+
+  it('mede a velocidade desde a âncora, não desde o último fix descartado', () => {
+    // Corredor a 10 km/h com fixes a cada segundo: cada passo (2,8 m) fica
+    // abaixo do portão de ruído e só o terceiro fix é aceito.
+    let state = {
+      ...createInitialRunState(5, 30, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -5.5264, lon: -47.4917 },
+      lastGpsTimestamp: 0,
+      gpsFixCount: 5,
+    };
+
+    for (let i = 1; i <= 4; i++) {
+      state = processGpsUpdate(state, -5.5264 + i * 0.000025, -47.4917, 6, i * 1000);
+    }
+
+    expect(state.speedKmh).toBeGreaterThan(7);
+    expect(state.speedKmh).toBeLessThan(14);
+  });
+
+  it('ignora fixes com precisão pior que 25 m para a distância', () => {
+    const state = {
+      ...createInitialRunState(5, 30, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+      gpsFixCount: 5,
+    };
+    const result = processGpsUpdate(state, -23.586, -46.657, 40, 60000);
+    expect(result.currentDistanceKm).toBe(0);
+    expect(result.gpsAccuracy).toBe(40);
+  });
+
+  it('os primeiros fixes apenas ancoram a posição (aquecimento)', () => {
+    let state = { ...createInitialRunState(5, 30, 'gps'), status: 'running' };
+    state = processGpsUpdate(state, -23.587, -46.657, 6, 1000, 3);
+    expect(state.currentDistanceKm).toBe(0);
+    expect(state.lastPosition).toEqual({ lat: -23.587, lon: -46.657 });
+
+    state = processGpsUpdate(state, -23.5865, -46.657, 6, 2000, 3);
+    expect(state.currentDistanceKm).toBe(0);
+  });
+
+  it('a velocidade Doppler do aparelho veta deslocamentos de quem está parado', () => {
+    const state = {
+      ...createInitialRunState(5, 30, 'gps'),
+      status: 'running',
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+      gpsFixCount: 5,
+    };
+    // 55 m em 60 s daria 3,3 km/h, mas o aparelho reporta 0,1 m/s.
+    const result = processGpsUpdate(state, -23.5865, -46.657, 8, 60000, 0.1);
+    expect(result.currentDistanceKm).toBe(0);
+  });
+
+  it('não limita a distância à meta quando o corredor ultrapassa o alvo', () => {
+    const state = {
+      ...createInitialRunState(0.5, 5, 'gps'),
+      status: 'running',
+      currentDistanceKm: 0.49,
+      lastPosition: { lat: -23.587, lon: -46.657 },
+      lastGpsTimestamp: 0,
+      gpsFixCount: 5,
+    };
+    const result = processGpsUpdate(state, -23.586, -46.657, 8, 60000);
+    expect(result.currentDistanceKm).toBeGreaterThan(0.5);
+    expect(result.status).toBe('completed');
   });
 });
 
@@ -562,12 +730,23 @@ describe('physioEstimation', () => {
     expect(hr2).toBeGreaterThanOrEqual(hr1);
   });
 
-  it('estimateCadence retorna entre 145 e 195', () => {
-    for (let speed = 0; speed <= 20; speed += 2) {
+  it('estimateCadence é zero parado e cresce com a velocidade', () => {
+    expect(estimateCadence(0)).toBe(0);
+    expect(estimateCadence(1)).toBe(0);
+    // Caminhada tem cadência menor que corrida, nunca cadência de corredor.
+    expect(estimateCadence(4)).toBeGreaterThan(0);
+    expect(estimateCadence(4)).toBeLessThan(150);
+    for (let speed = 8; speed <= 20; speed += 2) {
       const cad = estimateCadence(speed);
-      expect(cad).toBeGreaterThanOrEqual(145);
+      expect(cad).toBeGreaterThanOrEqual(150);
       expect(cad).toBeLessThanOrEqual(195);
     }
+  });
+
+  it('estimateHeartRate devolve a FC de repouso quando parado', () => {
+    expect(estimateHeartRate(0, 10, 190, 58)).toBe(58);
+    expect(estimateHeartRate(0.9, 10, 190, 58)).toBe(58);
+    expect(estimateHeartRate(10, 10, 190, 58)).toBeGreaterThan(100);
   });
 
   it('smoothRollingPaces com array vazio retorna 0', () => {

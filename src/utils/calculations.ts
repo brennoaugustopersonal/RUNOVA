@@ -57,12 +57,18 @@ export function calculateSpeed(distanceKm: MaybeNumber, durationSeconds: MaybeNu
 }
 
 /**
- * MET de corrida segundo o Compendium of Physical Activities (2011),
- * interpolado por velocidade em km/h.
+ * MET segundo o Compendium of Physical Activities (2011), interpolado por
+ * velocidade em km/h. Abaixo de 6,4 km/h a atividade é caminhada (ou parada) —
+ * tratar tudo como "trote leve" inflava as calorias de quem estava parado.
  */
 export function metForSpeed(speedKmh: number): number {
   if (speedKmh <= 0) return 1;
-  if (speedKmh < 6.4) return 6.0; // trote leve
+  if (speedKmh < 1.5) return 1.3; // parado / em pé
+  if (speedKmh < 3.2) return 2.0; // caminhada muito lenta
+  if (speedKmh < 4.5) return 3.0; // caminhada lenta
+  if (speedKmh < 5.5) return 3.8; // caminhada moderada
+  if (speedKmh < 6.4) return 5.0; // caminhada rápida
+  if (speedKmh < 7.0) return 6.0; // trote leve
   if (speedKmh < 8.0) return 8.3;
   if (speedKmh < 9.7) return 9.8;
   if (speedKmh < 11.3) return 11.0;

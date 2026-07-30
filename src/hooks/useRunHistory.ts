@@ -8,6 +8,7 @@ import {
   clearStoredRuns,
 } from '../services/storageService';
 import { computeStats } from '../services/statsService';
+import { calculatePace, calculateSpeed } from '../utils/calculations';
 import { fetchElevationGain } from '../services/elevationService';
 import { reverseGeocode } from '../services/weatherService';
 import type { RunRecord, RunState, RunStats } from '../types/domain';
@@ -37,14 +38,22 @@ export function useRunHistory(): UseRunHistoryResult {
   }, []);
 
   const addRun = useCallback((activeRunState: RunState): RunRecord => {
+    // Tempo em movimento é a base honesta de ritmo e velocidade médios:
+    // usar o tempo total transformaria uma pausa longa em ritmo de 60'/km.
+    const movingSeconds = Math.round(
+      activeRunState.movingSeconds > 0 ? activeRunState.movingSeconds : 0
+    );
+    const distanceKm = activeRunState.currentDistanceKm;
+
     const runData = {
-      distanceKm: activeRunState.currentDistanceKm,
+      distanceKm,
       targetDistanceKm: activeRunState.targetDistanceKm,
       durationSeconds: Math.round(activeRunState.elapsedSeconds),
+      movingSeconds,
       targetDurationSeconds: activeRunState.targetDurationSeconds,
-      paceMinKm: activeRunState.avgPaceMinKm,
+      paceMinKm: calculatePace(distanceKm, movingSeconds),
       targetPaceMinKm: activeRunState.targetPaceMinKm,
-      speedKmh: activeRunState.speedKmh,
+      speedKmh: calculateSpeed(distanceKm, movingSeconds),
       calories: activeRunState.calories,
       completedGoal: activeRunState.currentDistanceKm >= activeRunState.targetDistanceKm,
       routePoints: activeRunState.routePoints || [],

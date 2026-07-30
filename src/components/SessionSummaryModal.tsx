@@ -26,6 +26,10 @@ import { fetchElevationGain, describeTerrain } from '../services/elevationServic
 import { downloadGpx } from '../utils/download';
 import type { RunRecord, UnitSystem } from '../types/domain';
 
+/** Abaixo disto a corrida é curta demais para relevo ou comparação de ritmo. */
+const MIN_DISTANCE_FOR_ELEVATION_KM = 0.5;
+const MIN_DISTANCE_FOR_PACE_COMPARISON_KM = 0.2;
+
 interface SessionSummaryModalProps {
   runData: RunRecord | null;
   historyRuns?: RunRecord[];
@@ -51,7 +55,14 @@ function SessionSummaryModalFn({
       setElevationGain(runData.elevationGainM);
       return undefined;
     }
-    if (runData.mode !== 'gps' || (runData.routePoints?.length ?? 0) < 2) return undefined;
+    // Rotas curtas não têm relevo mensurável — só ruído do modelo de elevação.
+    if (
+      runData.mode !== 'gps' ||
+      (runData.routePoints?.length ?? 0) < 2 ||
+      runData.distanceKm < MIN_DISTANCE_FOR_ELEVATION_KM
+    ) {
+      return undefined;
+    }
 
     let cancelled = false;
     void fetchElevationGain(runData.routePoints).then((gain) => {
@@ -77,10 +88,16 @@ function SessionSummaryModalFn({
   } = runData;
 
   const unit = distanceUnitLabel(units);
+  const movingSeconds = runData.movingSeconds ?? durationSeconds;
+  const stoppedSeconds = Math.max(0, durationSeconds - movingSeconds);
+
+  // Comparação só faz sentido com distância real percorrida; e o desvio é
+  // limitado a ±99,9 % para nunca exibir algo como "−1077,7 %".
   const paceVsTarget =
-    targetPaceMinKm > 0 && paceMinKm > 0
-      ? ((targetPaceMinKm - paceMinKm) / targetPaceMinKm) * 100
+    targetPaceMinKm > 0 && paceMinKm > 0 && distanceKm >= MIN_DISTANCE_FOR_PACE_COMPARISON_KM
+      ? Math.max(-99.9, Math.min(99.9, ((targetPaceMinKm - paceMinKm) / targetPaceMinKm) * 100))
       : null;
+  const showElevation = elevationGain > 0 && distanceKm >= MIN_DISTANCE_FOR_ELEVATION_KM;
 
   const shareText =
     `Corri ${formatDistance(distanceKm, 2, units)} ${unit} em ${formatTime(durationSeconds)} ` +
@@ -154,6 +171,11 @@ function SessionSummaryModalFn({
             </dt>
             <dd className="text-xl font-extrabold text-white font-mono">
               {formatTime(durationSeconds)}
+              {stoppedSeconds > 30 && (
+                <span className="block text-[10px] font-medium text-slate-500 font-sans">
+                  {formatTime(movingSeconds)} em movimento
+                </span>
+              )}
             </dd>
           </div>
 
@@ -179,9 +201,9 @@ function SessionSummaryModalFn({
           </div>
         </dl>
 
-        {(elevationGain > 0 || paceVsTarget != null) && (
+        {(showElevation || paceVsTarget != null) && (
           <div className="grid grid-cols-2 gap-3">
-            {elevationGain > 0 && (
+            {showElevation && (
               <div className="p-3 rounded-2xl glass-panel border border-white/5 flex items-center gap-2">
                 <Mountain className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
                 <div className="min-w-0">

@@ -129,9 +129,12 @@ function ActiveRunViewFn({
     gpsDegraded,
     elevationGainM,
     splits,
+    isStationary,
+    movingSeconds,
   } = runState;
 
   const isPaused = status === 'paused';
+  const isStopped = mode === 'gps' && !isPaused && isStationary;
   const unit = distanceUnitLabel(units);
 
   const strokeWidth = 12;
@@ -141,10 +144,12 @@ function ActiveRunViewFn({
   const innerCircumference = 2 * Math.PI * innerRadius;
   const outerDashoffset = outerCircumference - (progressPercent / 100) * outerCircumference;
 
-  const pacePercent = Math.min(
-    100,
-    Math.max(0, ((MAX_PACE - currentPaceMinKm) / (MAX_PACE - MIN_PACE)) * 100)
-  );
+  // Ritmo indefinido (parado ou antes do primeiro metro) deixa o anel vazio —
+  // não cheio, que era a leitura de "ritmo perfeito".
+  const pacePercent =
+    currentPaceMinKm > 0
+      ? Math.min(100, Math.max(0, ((MAX_PACE - currentPaceMinKm) / (MAX_PACE - MIN_PACE)) * 100))
+      : 0;
   const innerDashoffset = innerCircumference - (pacePercent / 100) * innerCircumference;
 
   const paceDeltaSeconds =
@@ -165,7 +170,7 @@ function ActiveRunViewFn({
         <div className="relative z-10 flex items-center justify-between gap-2 flex-wrap">
           <p
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel text-xs font-semibold border ${
-              isPaused || gpsDegraded
+              isPaused || gpsDegraded || isStopped
                 ? 'text-amber-400 border-amber-500/30'
                 : 'text-[#ff6d2e] border-[#ff6d2e]/20'
             }`}
@@ -175,7 +180,7 @@ function ActiveRunViewFn({
               className={`w-2 h-2 rounded-full ${
                 isPaused
                   ? 'bg-amber-400'
-                  : gpsDegraded
+                  : gpsDegraded || isStopped
                     ? 'bg-amber-400 animate-pulse-soft'
                     : 'bg-[#ff6d2e] animate-ping'
               }`}
@@ -187,7 +192,9 @@ function ActiveRunViewFn({
                 : mode === 'gps'
                   ? gpsDegraded
                     ? 'GPS FRACO'
-                    : 'GPS AO VIVO'
+                    : isStopped
+                      ? 'PARADO'
+                      : 'GPS AO VIVO'
                   : 'SIMULADOR'}
             </span>
             {mode === 'gps' && gpsAccuracy != null && (
@@ -397,7 +404,7 @@ function ActiveRunViewFn({
               <div className="min-w-0">
                 <p className="text-[10px] uppercase font-bold text-slate-400">Cadência</p>
                 <p className="text-lg font-black text-white font-mono">
-                  {cadenceSpm}
+                  {cadenceSpm > 0 ? cadenceSpm : '--'}
                   <span className="text-xs text-amber-400 font-normal ml-1">spm</span>
                 </p>
               </div>
@@ -448,6 +455,9 @@ function ActiveRunViewFn({
               estimado
             </span>
             {splits.length > 0 && <span>· {splits.length} km marcados</span>}
+            {mode === 'gps' && elapsedSeconds - movingSeconds > 30 && (
+              <span>· em movimento {formatTime(movingSeconds)}</span>
+            )}
             {elevationGainM > 0 && (
               <span className="flex items-center gap-1">
                 <Mountain className="w-3 h-3" aria-hidden="true" />+{elevationGainM} m

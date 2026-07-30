@@ -79,6 +79,7 @@ function validateRunData(data: Partial<RunRecord> & Record<string, unknown>) {
     distanceKm: toNonNegative(data.distanceKm),
     targetDistanceKm: toNonNegative(data.targetDistanceKm),
     durationSeconds: Math.floor(toNonNegative(data.durationSeconds)),
+    movingSeconds: Math.floor(toNonNegative(data.movingSeconds)),
     targetDurationSeconds: Math.floor(toNonNegative(data.targetDurationSeconds)),
     paceMinKm: toNonNegative(data.paceMinKm),
     speedKmh: toNonNegative(data.speedKmh),
@@ -239,7 +240,21 @@ export function loadActiveRunSnapshot(): ActiveRunSnapshot | null {
       clearActiveRunSnapshot();
       return null;
     }
-    return parsed;
+    // Snapshots gravados por versões anteriores não têm os campos de
+    // movimento; sem os padrões, somas com undefined virariam NaN.
+    const state = parsed.runState;
+    return {
+      ...parsed,
+      runState: {
+        ...state,
+        movingSeconds: Number.isFinite(state.movingSeconds) ? state.movingSeconds : 0,
+        isStationary: state.isStationary ?? true,
+        gpsFixCount: Number.isFinite(state.gpsFixCount) ? state.gpsFixCount : 0,
+        lastMovementTs: state.lastMovementTs ?? null,
+        pausedAccumMs: Number.isFinite(state.pausedAccumMs) ? state.pausedAccumMs : 0,
+        pausedAtMs: state.pausedAtMs ?? null,
+      },
+    };
   } catch {
     return null;
   }

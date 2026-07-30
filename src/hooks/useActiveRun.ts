@@ -18,9 +18,28 @@ import type { ActiveRunSnapshot, RunMode, RunState } from '../types/domain';
 
 const SPEED_OPTIONS = [1, 2, 3, 5, 10];
 const SNAPSHOT_INTERVAL_MS = 5000;
-const MAX_GPS_ACCURACY_M = 50;
 const MAX_CATCHUP_SECONDS = 30;
 const PACE_ALERT_INTERVAL_MS = 120000;
+
+/**
+ * Zera o rastreamento de GPS: usado ao retomar uma corrida, quando a posição
+ * antiga não pode servir de referência — o salto até a posição atual não é
+ * distância percorrida.
+ */
+function resetGpsTracking(state: RunState): RunState {
+  return {
+    ...state,
+    lastPosition: null,
+    lastGpsTimestamp: null,
+    lastMovementTs: null,
+    gpsFixCount: 0,
+    isStationary: true,
+    speedKmh: 0,
+    currentPaceMinKm: 0,
+    rollingPaces: [],
+    gpsDegraded: false,
+  };
+}
 
 type RunCompletedHandler = (state: RunState) => void;
 
@@ -213,11 +232,19 @@ export function useActiveRun(onRunCompleted?: RunCompletedHandler): UseActiveRun
     gpsSignalStateRef.current = 'ok';
     lastTickTsRef.current = performance.now();
 
-    setRunState({
-      ...resumeAvailable.runState,
-      status: 'paused', // retoma pausada para o usuário decidir quando continuar
-      gpsDegraded: false,
-    });
+    const restored = resumeAvailable.runState;
+    const now = Date.now();
+    setRunState(
+      resetGpsTracking({
+        ...restored,
+        status: 'paused', // retoma pausada para o usuário decidir quando continuar
+        // Recalibra o relógio de parede: o tempo entre a queda e a restauração
+        // não é corrida, e o startedAt original produziria um tempo inflado.
+        startedAt: now - Math.max(0, restored.elapsedSeconds) * 1000,
+        pausedAccumMs: 0,
+        pausedAtMs: now,
+      })
+    );
     setResumeAvailable(null);
     voiceService.speak('Corrida restaurada. Toque em continuar quando estiver pronto.');
     triggerHaptic('medium');
@@ -234,7 +261,11 @@ export function useActiveRun(onRunCompleted?: RunCompletedHandler): UseActiveRun
     triggerHaptic('medium');
     lastTickTsRef.current = null;
     void releaseWakeLock();
-    setRunState((prev) => (prev && prev.status !== 'paused' ? { ...prev, status: 'paused' } : prev));
+    setRunState((prev) =>
+      prev && prev.status !== 'paused'
+        ? { ...prev, status: 'paused', pausedAtMs: Date.now(), isStationary: true, speedKmh: 0 }
+        : prev
+    );
   }, [releaseWakeLock]);
 
   const resumeRun = useCallback(() => {
@@ -243,9 +274,16 @@ export function useActiveRun(onRunCompleted?: RunCompletedHandler): UseActiveRun
     triggerHaptic('medium');
     lastTickTsRef.current = performance.now();
     void requestWakeLock();
-    setRunState((prev) =>
-      prev && prev.status !== 'running' ? { ...prev, status: 'running' } : prev
-    );
+    setRunState((prev) => {
+      if (!prev || prev.status === 'running') return prev;
+      const pausedFor = prev.pausedAtMs != null ? Math.max(0, Date.now() - prev.pausedAtMs) : 0;
+      return resetGpsTracking({
+        ...prev,
+        status: 'running',
+        pausedAccumMs: (prev.pausedAccumMs || 0) + pausedFor,
+        pausedAtMs: null,
+      });
+    });
   }, [requestWakeLock]);
 
   const toggleSpeedMultiplier = useCallback(() => {
@@ -327,20 +365,15 @@ export function useActiveRun(onRunCompleted?: RunCompletedHandler): UseActiveRun
 
     watchGpsRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-
-        if (accuracy != null && accuracy > MAX_GPS_ACCURACY_M) {
-          setRunState((prev) => {
-            if (!prev || prev.status !== 'running' || prev.mode !== 'gps') return prev;
-            return { ...prev, gpsAccuracy: Math.round(accuracy), gpsDegraded: true };
-          });
-          return;
-        }
+        const { latitude, longitude, accuracy, speed } = pos.coords;
 
         setRunState((prev) => {
           if (!prev || prev.status !== 'running' || prev.mode !== 'gps') return prev;
-          const updated = processGpsUpdate(prev, latitude, longitude, accuracy, pos.timestamp);
-          return updated ? { ...updated, gpsDegraded: false } : prev;
+          // Toda a filtragem (precisão, jitter, parada) vive no motor —
+          // aqui só repassamos o fix bruto, inclusive a velocidade Doppler.
+          return (
+            processGpsUpdate(prev, latitude, longitude, accuracy, pos.timestamp, speed) ?? prev
+          );
         });
       },
       () => {
@@ -373,12 +406,22 @@ export function useActiveRun(onRunCompleted?: RunCompletedHandler): UseActiveRun
         const last = lastTickTsRef.current ?? now;
         let deltaSec = (now - last) / 1000;
         lastTickTsRef.current = now;
-
-        // Aba suspensa pode produzir saltos enormes — limita a recuperação
         if (!Number.isFinite(deltaSec) || deltaSec < 0) deltaSec = 1;
-        if (deltaSec > MAX_CATCHUP_SECONDS) deltaSec = MAX_CATCHUP_SECONDS;
 
-        return prev.mode === 'gps' ? tickGpsRun(prev, deltaSec) : tickRunSimulation(prev, deltaSec);
+        if (prev.mode === 'gps') {
+          // Relógio de parede: o tempo de uma corrida real não pode encolher
+          // porque o navegador suspendeu a aba em segundo plano.
+          const wallElapsed =
+            prev.startedAt != null
+              ? (Date.now() - prev.startedAt - (prev.pausedAccumMs || 0)) / 1000
+              : prev.elapsedSeconds + deltaSec;
+          return tickGpsRun(prev, Math.max(0, wallElapsed - prev.elapsedSeconds));
+        }
+
+        // Simulação: o salto de uma aba suspensa é limitado para não
+        // "correr" minutos inteiros de uma vez.
+        if (deltaSec > MAX_CATCHUP_SECONDS) deltaSec = MAX_CATCHUP_SECONDS;
+        return tickRunSimulation(prev, deltaSec);
       });
     }, 1000);
 

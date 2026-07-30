@@ -36,6 +36,8 @@ export interface RunState {
   mode: RunMode;
 
   elapsedSeconds: number;
+  /** Tempo com movimento real detectado — base do ritmo médio e das calorias. */
+  movingSeconds: number;
   currentDistanceKm: number;
   currentPaceMinKm: number;
   avgPaceMinKm: number;
@@ -47,9 +49,16 @@ export interface RunState {
   cadenceSpm: number;
 
   routePoints: RoutePoint[];
+  /** Última posição aceita como real (âncora do cálculo de distância). */
   lastPosition: GeoPosition | null;
   gpsAccuracy: number | null;
   gpsDegraded: boolean;
+  /** true quando nenhum movimento válido é detectado há alguns segundos. */
+  isStationary: boolean;
+  /** Fixes já aceitos — os primeiros são descartados (aquecimento do GPS). */
+  gpsFixCount: number;
+  /** Timestamp (ms) do último deslocamento aceito. */
+  lastMovementTs: number | null;
   splits: Split[];
   lastKmMarked: number;
 
@@ -63,6 +72,10 @@ export interface RunState {
   elevationGainM: number;
   lastElevationM: number | null;
   startedAt: number | null;
+  /** Total de milissegundos em pausa — descontado do relógio de parede. */
+  pausedAccumMs: number;
+  /** Instante (ms) em que a pausa atual começou, ou null se está correndo. */
+  pausedAtMs: number | null;
 }
 
 /** Corrida persistida no histórico local. */
@@ -72,6 +85,8 @@ export interface RunRecord {
   distanceKm: number;
   targetDistanceKm: number;
   durationSeconds: number;
+  /** Tempo em movimento; ausente em corridas salvas antes desta métrica. */
+  movingSeconds?: number;
   targetDurationSeconds: number;
   paceMinKm: number;
   targetPaceMinKm: number;

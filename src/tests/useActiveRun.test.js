@@ -147,6 +147,44 @@ describe('useActiveRun', () => {
     expect(result.current.runState.status).toBe('running');
   });
 
+  it('resumeRun descarta a âncora de GPS anterior e contabiliza a pausa', () => {
+    createInitialRunState.mockReturnValue({
+      ...mockInitialState,
+      mode: 'gps',
+      lastPosition: { lat: -23.5, lon: -46.6 },
+      lastGpsTimestamp: 1000,
+      lastMovementTs: 1000,
+      gpsFixCount: 7,
+      speedKmh: 11,
+      currentPaceMinKm: 5.4,
+      rollingPaces: [5.4, 5.5],
+      pausedAccumMs: 0,
+      pausedAtMs: null,
+    });
+
+    const { result } = renderHook(() => useActiveRun());
+    act(() => { result.current.requestStartRun(5, 30, 'gps'); });
+    act(() => { result.current.handleCountdownComplete(); });
+    act(() => { result.current.pauseRun(); });
+
+    expect(result.current.runState.pausedAtMs).not.toBeNull();
+
+    act(() => { result.current.resumeRun(); });
+
+    const state = result.current.runState;
+    // Sem isso, o salto entre a posição antiga e a atual viraria distância.
+    expect(state.lastPosition).toBeNull();
+    expect(state.lastGpsTimestamp).toBeNull();
+    expect(state.lastMovementTs).toBeNull();
+    expect(state.gpsFixCount).toBe(0);
+    expect(state.speedKmh).toBe(0);
+    expect(state.currentPaceMinKm).toBe(0);
+    expect(state.rollingPaces).toEqual([]);
+    expect(state.isStationary).toBe(true);
+    expect(state.pausedAtMs).toBeNull();
+    expect(state.pausedAccumMs).toBeGreaterThanOrEqual(0);
+  });
+
   it('toggleSpeedMultiplier cicla entre [1,2,3,5,10]', () => {
     const { result } = renderHook(() => useActiveRun());
 

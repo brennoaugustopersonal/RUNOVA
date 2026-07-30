@@ -71,12 +71,17 @@ export function computeStats(runs: RunRecord[], now = new Date()): RunStats {
 
   let totalDistanceKm = 0;
   let totalDurationSeconds = 0;
+  let totalMovingSeconds = 0;
   let totalCalories = 0;
   let totalElevationM = 0;
 
   for (const run of runs) {
+    const duration = Number(run.durationSeconds) || 0;
     totalDistanceKm += Number(run.distanceKm) || 0;
-    totalDurationSeconds += Number(run.durationSeconds) || 0;
+    totalDurationSeconds += duration;
+    // Corridas antigas não têm movingSeconds — nelas o tempo total é a
+    // melhor aproximação disponível.
+    totalMovingSeconds += Number(run.movingSeconds) > 0 ? Number(run.movingSeconds) : duration;
     totalCalories += Number(run.calories) || 0;
     totalElevationM += Number(run.elevationGainM) || 0;
   }
@@ -84,7 +89,8 @@ export function computeStats(runs: RunRecord[], now = new Date()): RunStats {
   return {
     totalDistanceKm,
     totalDurationSeconds,
-    avgPaceMinKm: calculatePace(totalDistanceKm, totalDurationSeconds),
+    // Ritmo médio sobre o tempo em movimento: paradas não são ritmo.
+    avgPaceMinKm: calculatePace(totalDistanceKm, totalMovingSeconds),
     totalRuns: runs.length,
     totalCalories,
     totalElevationM,
@@ -139,7 +145,10 @@ export function getBestVo2Max(runs: RunRecord[]): number {
   if (!Array.isArray(runs) || runs.length === 0) return 0;
   return runs.reduce((best, run) => {
     if (Number(run.distanceKm) < 1.5) return best;
-    const vo2 = estimateVo2Max(run.distanceKm, run.durationSeconds);
+    // Pausas não fazem parte da performance que o VO2máx estima.
+    const effortSeconds =
+      Number(run.movingSeconds) > 0 ? Number(run.movingSeconds) : run.durationSeconds;
+    const vo2 = estimateVo2Max(run.distanceKm, effortSeconds);
     return vo2 > best ? vo2 : best;
   }, 0);
 }

@@ -10,13 +10,28 @@ import {
   calculateInstantPaceFromSpeed,
   resolveMaxHeartRate,
 } from './physioEstimation';
+import { estimateGradeEffort } from './elevationService';
 import { getSettings } from './storageService';
 import type { HeartRateSample, RoutePoint, RunMode, RunState, Split } from '../types/domain';
 
 const MAX_LIVE_ROUTE_POINTS = 3000;
-const MIN_GPS_MOVE_M = 3; // ignora jitter abaixo de 3 metros
-const MAX_GPS_ACCURACY_M = 50;
+
+/** Acima disso o fix não é usado nem para o indicador de distância. */
+export const MAX_GPS_ACCURACY_M = 50;
+/** Só fixes com esta precisão (ou melhor) podem mover a distância. */
+export const GPS_ACCURACY_FOR_DISTANCE_M = 25;
+/** Deslocamento mínimo absoluto; o efetivo escala com a precisão do fix. */
+const MIN_GPS_MOVE_M = 8;
+/** Fixes iniciais usados apenas para ancorar a posição (aquecimento do GPS). */
+const GPS_WARMUP_FIXES = 2;
+/** Abaixo desta velocidade o usuário está parado — jitter, não deslocamento. */
+const MIN_GPS_SPEED_KMH = 2;
 const MAX_PLAUSIBLE_SPEED_KMH = 45;
+/** Sem movimento aceito por este tempo, a sessão entra em estado "parado". */
+const STATIONARY_AFTER_S = 15;
+/** Precisão assumida quando o dispositivo não informa nenhuma. */
+const ASSUMED_ACCURACY_M = 20;
+
 const HR_SAMPLE_INTERVAL_S = 5;
 const MAX_HR_SAMPLES = 600; // 600 × 5s = 50 min
 const MAX_ROLLING_PACES = 10;
@@ -115,6 +130,12 @@ function pushRollingPace(paces: number[] | undefined, pace: number): number[] {
   return next.length > MAX_ROLLING_PACES ? next.slice(next.length - MAX_ROLLING_PACES) : next;
 }
 
+/** Há quantos segundos o último movimento válido foi registrado. */
+function secondsSinceMovement(lastMovementTs: number | null, nowMs: number): number {
+  if (lastMovementTs == null) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (nowMs - lastMovementTs) / 1000);
+}
+
 export function createInitialRunState(
   targetDistanceKm = 2.1,
   targetDurationMinutes = 12,
@@ -136,20 +157,26 @@ export function createInitialRunState(
     mode,
 
     elapsedSeconds: 0,
+    movingSeconds: 0,
     currentDistanceKm: 0,
-    currentPaceMinKm: targetPace,
-    avgPaceMinKm: targetPace,
+    // Ritmo começa indefinido (0 → a UI mostra "--"): exibir o ritmo-alvo aqui
+    // fazia o app inventar um ritmo antes do primeiro metro percorrido.
+    currentPaceMinKm: 0,
+    avgPaceMinKm: 0,
     speedKmh: 0,
     calories: 0,
     progressPercent: 0,
 
     heartRateBpm: estimateHeartRate(0, 0, profile.maxHr, profile.restingHr),
-    cadenceSpm: estimateCadence(0),
+    cadenceSpm: 0,
 
     routePoints: [],
     lastPosition: null,
     gpsAccuracy: null,
     gpsDegraded: false,
+    isStationary: true,
+    gpsFixCount: 0,
+    lastMovementTs: null,
     splits: [],
     lastKmMarked: 0,
 
@@ -163,6 +190,8 @@ export function createInitialRunState(
     elevationGainM: 0,
     lastElevationM: null,
     startedAt: null,
+    pausedAccumMs: 0,
+    pausedAtMs: null,
   };
 }
 
@@ -189,15 +218,19 @@ export function tickRunSimulation(state: RunState, deltaSeconds = 1): RunState {
     isCompleted = true;
   }
 
-  const avgPace = calculatePace(newDistanceKm, newElapsed);
-  const speed = calculateSpeed(newDistanceKm, newElapsed);
-  const calories = calculateCalories(newDistanceKm, newElapsed, profile.weightKg);
+  // No simulador o corredor nunca para: tempo total == tempo em movimento.
+  const newMovingSeconds = state.mode === 'simulation' ? newElapsed : state.movingSeconds;
+
+  const avgPace = calculatePace(newDistanceKm, newMovingSeconds);
+  const speed = calculateSpeed(newDistanceKm, newMovingSeconds);
+  const gradeFactor = estimateGradeEffort(newDistanceKm, state.elevationGainM);
+  const calories = calculateCalories(newDistanceKm, newMovingSeconds, profile.weightKg, gradeFactor);
   const progressPercent = Math.min(100, (newDistanceKm / state.targetDistanceKm) * 100);
 
   const heartRateBpm = state.bluetoothHrConnected
     ? state.heartRateBpm
-    : estimateHeartRate(speed || state.speedKmh, newElapsed / 60, profile.maxHr, profile.restingHr);
-  const cadenceSpm = estimateCadence(speed || state.speedKmh);
+    : estimateHeartRate(speed, newMovingSeconds / 60, profile.maxHr, profile.restingHr);
+  const cadenceSpm = estimateCadence(speed);
 
   // Rota sintética apenas no simulador — nunca contamina uma corrida por GPS.
   let newRoutePoints = state.routePoints;
@@ -221,7 +254,7 @@ export function tickRunSimulation(state: RunState, deltaSeconds = 1): RunState {
   const { newSplits, lastKmMarked } = computeSplits(
     newDistanceKm,
     state.currentDistanceKm,
-    newElapsed,
+    newMovingSeconds,
     state.splits,
     state.lastKmMarked
   );
@@ -229,14 +262,16 @@ export function tickRunSimulation(state: RunState, deltaSeconds = 1): RunState {
   return {
     ...state,
     elapsedSeconds: newElapsed,
+    movingSeconds: newMovingSeconds,
     currentDistanceKm: newDistanceKm,
     currentPaceMinKm: currentPace,
-    avgPaceMinKm: avgPace > 0 ? avgPace : basePace,
+    avgPaceMinKm: avgPace,
     speedKmh: speed,
     calories: Math.round(calories),
     progressPercent,
     heartRateBpm,
     cadenceSpm,
+    isStationary: state.mode === 'simulation' ? false : state.isStationary,
     heartRateHistory: appendHeartRateSample(state.heartRateHistory, newElapsed, heartRateBpm),
     routePoints: newRoutePoints,
     splits: newSplits,
@@ -246,28 +281,41 @@ export function tickRunSimulation(state: RunState, deltaSeconds = 1): RunState {
   };
 }
 
-export function tickGpsRun(state: RunState, deltaSeconds = 1): RunState {
+/**
+ * Avanço do relógio numa corrida por GPS. A distância vem exclusivamente de
+ * processGpsUpdate; aqui só o tempo corre — e o tempo em movimento só acumula
+ * enquanto o GPS confirma deslocamento real.
+ */
+export function tickGpsRun(state: RunState, deltaSeconds = 1, nowMs = Date.now()): RunState {
   if (state.status !== 'running') return state;
 
   const profile = getProfile();
-  const effectiveDelta = deltaSeconds * (state.speedMultiplier || 1);
-  const newElapsed = state.elapsedSeconds + effectiveDelta;
-  const basePace = state.targetPaceMinKm || 5.7;
+  const delta = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 0;
+  const newElapsed = state.elapsedSeconds + delta;
   const newDistanceKm = state.currentDistanceKm;
 
-  const avgPace = calculatePace(newDistanceKm, newElapsed);
-  const speed = calculateSpeed(newDistanceKm, newElapsed);
-  const calories = calculateCalories(newDistanceKm, newElapsed, profile.weightKg);
-  const progressPercent = Math.min(100, (newDistanceKm / state.targetDistanceKm) * 100);
+  const isStationary = secondsSinceMovement(state.lastMovementTs, nowMs) > STATIONARY_AFTER_S;
+  const newMovingSeconds = state.movingSeconds + (isStationary ? 0 : delta);
+
+  const speedKmh = isStationary ? 0 : state.speedKmh;
+  const currentPaceMinKm = isStationary ? 0 : state.currentPaceMinKm;
+
+  const avgPace = calculatePace(newDistanceKm, newMovingSeconds);
+  const gradeFactor = estimateGradeEffort(newDistanceKm, state.elevationGainM);
+  const calories = calculateCalories(newDistanceKm, newMovingSeconds, profile.weightKg, gradeFactor);
+  const progressPercent =
+    state.targetDistanceKm > 0
+      ? Math.min(100, (newDistanceKm / state.targetDistanceKm) * 100)
+      : 0;
 
   const heartRateBpm = state.bluetoothHrConnected
     ? state.heartRateBpm
-    : estimateHeartRate(speed || state.speedKmh, newElapsed / 60, profile.maxHr, profile.restingHr);
+    : estimateHeartRate(speedKmh, newMovingSeconds / 60, profile.maxHr, profile.restingHr);
 
   const { newSplits, lastKmMarked } = computeSplits(
     newDistanceKm,
     state.currentDistanceKm,
-    newElapsed,
+    newMovingSeconds,
     state.splits,
     state.lastKmMarked
   );
@@ -275,12 +323,15 @@ export function tickGpsRun(state: RunState, deltaSeconds = 1): RunState {
   return {
     ...state,
     elapsedSeconds: newElapsed,
-    avgPaceMinKm: avgPace > 0 ? avgPace : basePace,
-    speedKmh: speed,
+    movingSeconds: newMovingSeconds,
+    avgPaceMinKm: avgPace,
+    currentPaceMinKm,
+    speedKmh,
     calories: Math.round(calories),
     progressPercent,
     heartRateBpm,
-    cadenceSpm: estimateCadence(speed || state.speedKmh),
+    cadenceSpm: estimateCadence(speedKmh),
+    isStationary,
     heartRateHistory: appendHeartRateSample(state.heartRateHistory, newElapsed, heartRateBpm),
     splits: newSplits,
     lastKmMarked,
@@ -288,103 +339,147 @@ export function tickGpsRun(state: RunState, deltaSeconds = 1): RunState {
   };
 }
 
+/**
+ * Integra um fix de GPS na corrida.
+ *
+ * Filtros em camadas — nesta ordem — para que estar parado nunca gere distância:
+ *   1. precisão pior que MAX_GPS_ACCURACY_M: só atualiza o indicador de sinal;
+ *   2. precisão pior que GPS_ACCURACY_FOR_DISTANCE_M: não move a âncora;
+ *   3. os primeiros fixes apenas ancoram a posição (aquecimento do GPS);
+ *   4. deslocamento precisa superar max(8 m, 60 % da precisão do fix);
+ *   5. a velocidade (Doppler do aparelho, quando disponível, ou derivada das
+ *      posições) precisa ficar entre MIN_GPS_SPEED_KMH e MAX_PLAUSIBLE_SPEED_KMH.
+ *
+ * `speedMps` é `position.coords.speed` — a medida Doppler do aparelho, muito
+ * mais confiável que a diferença entre coordenadas para detectar parada.
+ */
 export function processGpsUpdate(
   state: RunState | null,
   latitude: number,
   longitude: number,
   accuracy: number | null,
-  timestamp: number | null
+  timestamp: number | null,
+  speedMps: number | null = null
 ): RunState | null {
   if (!state || state.status !== 'running' || state.mode !== 'gps') return null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const nowTs = timestamp != null && Number.isFinite(timestamp) ? timestamp : Date.now();
 
   // Fixes imprecisos não movem a distância, mas atualizam o indicador de sinal.
-  if (accuracy != null && accuracy > MAX_GPS_ACCURACY_M) {
+  if (accuracy != null && Number.isFinite(accuracy) && accuracy > MAX_GPS_ACCURACY_M) {
     return { ...state, gpsAccuracy: Math.round(accuracy), gpsDegraded: true };
   }
 
   const profile = getProfile();
-  const lastGpsTs = state.lastGpsTimestamp;
-  const deltaSec = lastGpsTs != null && timestamp != null ? (timestamp - lastGpsTs) / 1000 : 0;
+  const acc =
+    accuracy != null && Number.isFinite(accuracy) && accuracy > 0 ? accuracy : ASSUMED_ACCURACY_M;
+  const usableForDistance = acc <= GPS_ACCURACY_FOR_DISTANCE_M;
+  const fixCount = state.gpsFixCount + 1;
 
-  let addedKm = 0;
-  let instantSpeedKmh = 0;
-  if (state.lastPosition) {
-    addedKm = calculateHaversineDistance(
-      state.lastPosition.lat,
-      state.lastPosition.lon,
-      latitude,
-      longitude
-    );
-    if (addedKm * 1000 < MIN_GPS_MOVE_M) {
-      addedKm = 0;
-    }
-    if (deltaSec > 0 && addedKm > 0) {
-      instantSpeedKmh = (addedKm / deltaSec) * 3600;
-      // Descarta saltos impossíveis (perda de sinal, multipath urbano).
-      if (instantSpeedKmh > MAX_PLAUSIBLE_SPEED_KMH || !Number.isFinite(instantSpeedKmh)) {
-        addedKm = 0;
-        instantSpeedKmh = 0;
-      }
-    }
+  const deltaSec =
+    state.lastGpsTimestamp != null ? (nowTs - state.lastGpsTimestamp) / 1000 : 0;
+  const movedM = state.lastPosition
+    ? calculateHaversineDistance(state.lastPosition.lat, state.lastPosition.lon, latitude, longitude) *
+      1000
+    : 0;
+
+  // O portão de ruído cresce com a incerteza do fix: com ±20 m, saltos de
+  // 12 m são indistinguíveis de estar parado.
+  const moveGateM = Math.max(MIN_GPS_MOVE_M, acc * 0.6);
+  const derivedKmh = deltaSec > 0 && movedM > 0 ? movedM / 1000 / (deltaSec / 3600) : 0;
+  const dopplerKmh =
+    speedMps != null && Number.isFinite(speedMps) && speedMps >= 0 ? speedMps * 3.6 : null;
+
+  const warmedUp = fixCount > GPS_WARMUP_FIXES && state.lastPosition != null;
+  const dopplerSaysMoving = dopplerKmh == null || dopplerKmh >= MIN_GPS_SPEED_KMH;
+  const accepted =
+    usableForDistance &&
+    warmedUp &&
+    movedM >= moveGateM &&
+    derivedKmh >= MIN_GPS_SPEED_KMH &&
+    derivedKmh <= MAX_PLAUSIBLE_SPEED_KMH &&
+    dopplerSaysMoving;
+
+  const addedKm = accepted ? movedM / 1000 : 0;
+  const newDistanceKm = state.currentDistanceKm + addedKm;
+
+  // Movimento real também é confirmado pelo Doppler antes de o deslocamento
+  // acumulado vencer o portão — evita marcar "parado" quem corre devagar.
+  const dopplerMoving = dopplerKmh != null && dopplerKmh >= MIN_GPS_SPEED_KMH;
+  const lastMovementTs = accepted || dopplerMoving ? nowTs : state.lastMovementTs;
+  const isStationary = secondsSinceMovement(lastMovementTs, nowTs) > STATIONARY_AFTER_S;
+
+  // A âncora só avança em fixes confiáveis; senão o ruído viraria deslocamento.
+  const anchorMoves = usableForDistance && (accepted || state.lastPosition == null || !warmedUp);
+  const lastPosition = anchorMoves ? { lat: latitude, lon: longitude } : state.lastPosition;
+
+  // A rota registra apenas deslocamentos aceitos (e o ponto de partida),
+  // mantendo o traçado do mapa livre do zigue-zague de jitter.
+  const isFirstPoint = state.routePoints.length === 0 && anchorMoves;
+  const newRoutePoints =
+    accepted || isFirstPoint
+      ? capRoutePoints([...state.routePoints, [latitude, longitude] as RoutePoint])
+      : state.routePoints;
+
+  let speedKmh = isStationary ? 0 : state.speedKmh;
+  let currentPaceMinKm = isStationary ? 0 : state.currentPaceMinKm;
+  let newRollingPaces = state.rollingPaces;
+
+  if (accepted) {
+    speedKmh = dopplerKmh != null && dopplerKmh > 0 ? dopplerKmh : derivedKmh;
+    const instantPace = calculateInstantPaceFromSpeed(speedKmh);
+    newRollingPaces = pushRollingPace(state.rollingPaces, instantPace);
+    currentPaceMinKm =
+      newRollingPaces.length > 0
+        ? newRollingPaces.reduce((a, b) => a + b, 0) / newRollingPaces.length
+        : instantPace;
   }
 
-  const newDistanceKm = Math.min(state.targetDistanceKm, state.currentDistanceKm + addedKm);
-  const isCompleted = newDistanceKm >= state.targetDistanceKm;
-  const newRoutePoints = capRoutePoints([...state.routePoints, [latitude, longitude]]);
-
-  let currentPaceMinKm = state.currentPaceMinKm;
-  let speedKmh = state.speedKmh;
-  if (deltaSec > 1 && instantSpeedKmh > 2 && instantSpeedKmh < MAX_PLAUSIBLE_SPEED_KMH) {
-    speedKmh = instantSpeedKmh;
-    currentPaceMinKm = calculateInstantPaceFromSpeed(instantSpeedKmh);
-  }
-
-  const newRollingPaces = pushRollingPace(state.rollingPaces, currentPaceMinKm);
-  const smoothedPace =
-    newRollingPaces.length > 0
-      ? newRollingPaces.reduce((a, b) => a + b, 0) / newRollingPaces.length
-      : currentPaceMinKm;
-
-  // O timer (tickGpsRun) é o dono de elapsedSeconds — não contar duas vezes aqui.
-  const newElapsed = state.elapsedSeconds;
-
-  const avgPace = calculatePace(newDistanceKm, newElapsed);
-  const calories = calculateCalories(newDistanceKm, newElapsed, profile.weightKg);
-  const progressPercent = Math.min(100, (newDistanceKm / state.targetDistanceKm) * 100);
+  // O timer (tickGpsRun) é o dono do tempo — não contar duas vezes aqui.
+  const movingSeconds = state.movingSeconds;
+  const avgPace = calculatePace(newDistanceKm, movingSeconds);
+  const gradeFactor = estimateGradeEffort(newDistanceKm, state.elevationGainM);
+  const calories = calculateCalories(newDistanceKm, movingSeconds, profile.weightKg, gradeFactor);
+  const progressPercent =
+    state.targetDistanceKm > 0
+      ? Math.min(100, (newDistanceKm / state.targetDistanceKm) * 100)
+      : 0;
+  const isCompleted = state.targetDistanceKm > 0 && newDistanceKm >= state.targetDistanceKm;
 
   const heartRateBpm = state.bluetoothHrConnected
     ? state.heartRateBpm
-    : estimateHeartRate(
-        speedKmh || state.speedKmh,
-        newElapsed / 60,
-        profile.maxHr,
-        profile.restingHr
-      );
+    : estimateHeartRate(speedKmh, movingSeconds / 60, profile.maxHr, profile.restingHr);
 
   const { newSplits, lastKmMarked } = computeSplits(
     newDistanceKm,
     state.currentDistanceKm,
-    newElapsed,
+    movingSeconds,
     state.splits,
     state.lastKmMarked
   );
 
   return {
     ...state,
-    elapsedSeconds: newElapsed,
     currentDistanceKm: newDistanceKm,
-    currentPaceMinKm: smoothedPace,
-    avgPaceMinKm: avgPace > 0 ? avgPace : state.avgPaceMinKm,
+    currentPaceMinKm,
+    avgPaceMinKm: avgPace,
     speedKmh,
     calories: Math.round(calories),
     progressPercent,
-    gpsAccuracy: accuracy != null ? Math.round(accuracy) : state.gpsAccuracy,
+    gpsAccuracy: Math.round(acc),
     gpsDegraded: false,
+    gpsFixCount: fixCount,
+    isStationary,
+    lastMovementTs,
     heartRateBpm,
-    cadenceSpm: estimateCadence(speedKmh || state.speedKmh),
-    heartRateHistory: appendHeartRateSample(state.heartRateHistory, newElapsed, heartRateBpm),
-    lastPosition: { lat: latitude, lon: longitude },
-    lastGpsTimestamp: timestamp,
+    cadenceSpm: estimateCadence(speedKmh),
+    heartRateHistory: appendHeartRateSample(state.heartRateHistory, state.elapsedSeconds, heartRateBpm),
+    lastPosition,
+    // O timestamp acompanha a âncora: se o fix não a moveu, o intervalo
+    // continua contando desde o último ponto aceito — do contrário a
+    // velocidade instantânea explodiria (8 m acumulados / 1 s).
+    lastGpsTimestamp: anchorMoves ? nowTs : state.lastGpsTimestamp,
     routePoints: newRoutePoints,
     splits: newSplits,
     lastKmMarked,

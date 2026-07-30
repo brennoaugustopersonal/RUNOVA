@@ -175,6 +175,12 @@ describe('calculateCalories', () => {
     expect(cal).toBeGreaterThan(0);
   });
 
+  it('não infla calorias de um deslocamento residual em 15 min parado', () => {
+    // Cenário do bug: 0,23 km em 925 s (0,9 km/h) devolvia 153 kcal.
+    const cal = calculateCalories(0.23, 925, 72);
+    expect(cal).toBeLessThan(40);
+  });
+
   it('retorna distância * 65 como fallback quando calorias calculadas zeram', () => {
     const cal = calculateCalories(0, 600, 72);
     expect(cal).toBe(0);

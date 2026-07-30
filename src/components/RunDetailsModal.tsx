@@ -131,6 +131,11 @@ function RunDetailsModalFn({
             </dt>
             <dd className="text-xl font-extrabold text-white font-mono">
               {formatTime(run.durationSeconds)}
+              {run.movingSeconds != null && run.durationSeconds - run.movingSeconds > 30 && (
+                <span className="block text-[10px] font-medium text-slate-500 font-sans">
+                  {formatTime(run.movingSeconds)} em movimento
+                </span>
+              )}
             </dd>
           </div>
 

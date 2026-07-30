@@ -1,3 +1,4 @@
+import { calculateHaversineDistance } from '../utils/calculations';
 import type {
   AirQuality,
   ConditionsScore,
@@ -280,6 +281,11 @@ export function getAqiColor(aqi: number): string {
   return '#a855f7';
 }
 
+/** Espaçamento mínimo entre amostras de elevação (resolução do DEM). */
+const ELEVATION_SAMPLE_SPACING_M = 100;
+/** Diferença mínima entre amostras para contar como subida real. */
+const ELEVATION_NOISE_FLOOR_M = 3;
+
 /**
  * Ganho de elevação via Open-Meteo Elevation API (gratuita).
  * Aceita [lat, lon] ou {lat, lon}.
@@ -289,12 +295,27 @@ export async function fetchElevationGain(
 ): Promise<number> {
   if (!Array.isArray(routePoints) || routePoints.length < 2) return 0;
 
-  // A API aceita no máximo 100 coordenadas por requisição.
-  const step = Math.max(1, Math.ceil(routePoints.length / 100));
-  const sampled = routePoints.filter((_, i) => i % step === 0 || i === routePoints.length - 1);
+  const coords = routePoints.map((p) =>
+    Array.isArray(p) ? { lat: p[0], lon: p[1] } : { lat: p.lat, lon: p.lon }
+  );
 
-  const lats = sampled.map((p) => (Array.isArray(p) ? p[0] : p.lat));
-  const lons = sampled.map((p) => (Array.isArray(p) ? p[1] : p.lon));
+  // O modelo de elevação tem resolução de ~90 m: amostrar pontos mais
+  // próximos que isso só mede o ruído do DEM, não o relevo percorrido.
+  const spaced: Array<{ lat: number; lon: number }> = [coords[0]];
+  for (const point of coords.slice(1)) {
+    const previous = spaced[spaced.length - 1];
+    const gapM =
+      calculateHaversineDistance(previous.lat, previous.lon, point.lat, point.lon) * 1000;
+    if (gapM >= ELEVATION_SAMPLE_SPACING_M) spaced.push(point);
+  }
+  if (spaced.length < 3) return 0;
+
+  // A API aceita no máximo 100 coordenadas por requisição.
+  const step = Math.max(1, Math.ceil(spaced.length / 100));
+  const sampled = spaced.filter((_, i) => i % step === 0 || i === spaced.length - 1);
+
+  const lats = sampled.map((p) => p.lat);
+  const lons = sampled.map((p) => p.lon);
   if (lats.some((v) => !Number.isFinite(v)) || lons.some((v) => !Number.isFinite(v))) return 0;
 
   const url =
@@ -308,7 +329,9 @@ export async function fetchElevationGain(
   let gain = 0;
   for (let i = 1; i < elevations.length; i++) {
     const diff = elevations[i] - elevations[i - 1];
-    if (diff > 0.5) gain += diff; // ignora ruído abaixo de 0,5 m
+    // O DEM erra alguns metros entre células vizinhas; só subidas acima de
+    // 3 m entre amostras contam como ganho real de elevação.
+    if (diff > ELEVATION_NOISE_FLOOR_M) gain += diff;
   }
   return Math.round(gain);
 }
